@@ -4,6 +4,7 @@ import Button from '../ui/Button';
 export default function ListingCard({
   listing,
   showActions = false,
+  onEdit,   // FIX: CRIT-007 — added onEdit prop for listing edit navigation
   onApprove,
   onReject,
   onSubmit,
@@ -85,6 +86,17 @@ export default function ListingCard({
         {/* Actions */}
         {showActions && (
           <div className="mt-auto flex flex-wrap gap-2 pt-1">
+            {/* FIX: CRIT-007 — Edit button navigates to listing edit page */}
+            {onEdit && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit?.()}
+                style={{ borderColor: '#1F4D3A', color: '#1F4D3A' }}
+              >
+                Edit
+              </Button>
+            )}
             {/* Draft → submit for approval (Realtor action) */}
             {(status === 'draft' || status === 'rejected') && (
               <Button

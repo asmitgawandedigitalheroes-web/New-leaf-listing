@@ -153,22 +153,28 @@ export function useUsers() {
         body: JSON.stringify({ userId: id, caller_token: token }),
       });
 
-      const data = await response.json();
+      let data = {};
+      try {
+        data = await response.json();
+      } catch {
+        // Non-JSON response (e.g. 404 HTML page from gateway when function isn't deployed)
+        throw new Error(`HTTP ${response.status} — edge function may not be deployed yet`);
+      }
 
       if (!response.ok || data?.success === false) {
         const msg = data?.error || `Request failed with status ${response.status}`;
-        console.error('[useUsers] Delete user edge function error:', msg, '| HTTP status:', response.status);
+        console.error('[useUsers] Delete error:', msg, '| status:', response.status);
         throw new Error(msg);
       }
 
       console.log('[useUsers] User deleted successfully:', id);
-      // audit is now handled inside the edge function, but we can still do a local one if desired
-      // however, to avoid duplication, we'll rely on the server-side audit
-      
       setUsers(prev => prev.filter(u => u.id !== id));
       return { error: null };
     } catch (err) {
       console.error('[useUsers] deleteUser failed:', err.message);
+      // Refresh from DB so the UI reflects actual state — the user may have been
+      // deleted even if the edge function returned a non-2xx (e.g. audit log failed).
+      await fetchUsers();
       return { error: err };
     }
   };

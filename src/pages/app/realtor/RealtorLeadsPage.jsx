@@ -249,13 +249,22 @@ export default function RealtorLeadsPage() {
                 </div>
                 <div className="flex items-center justify-between mt-auto">
                   <Badge status={normalizeStatus(lead.status)} label={STATUS_LABELS[normalizeStatus(lead.status)]} />
-                  <button
-                    onClick={(e) => openDisputeModal(lead, e)}
-                    className="text-gray-300 hover:text-red-400 transition-colors"
-                    title="Raise Dispute"
-                  >
-                    <HiExclamationTriangle className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); openDrawer(lead); }}
+                      className="px-3 py-1 rounded-lg text-xs font-semibold border border-gray-200 text-gray-600 hover:border-yellow-400 hover:text-yellow-700 transition-all"
+                      aria-label={`View details for ${maskName(lead.contact_name)}`}
+                    >
+                      View Details
+                    </button>
+                    <button
+                      onClick={(e) => openDisputeModal(lead, e)}
+                      className="text-gray-300 hover:text-red-400 transition-colors"
+                      title="Raise Dispute"
+                    >
+                      <HiExclamationTriangle className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}

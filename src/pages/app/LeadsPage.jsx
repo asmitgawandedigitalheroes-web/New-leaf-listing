@@ -25,23 +25,23 @@ export default function LeadsPage() {
   const [addOpen, setAddOpen] = useState(false);
 
   const [addForm, setAddForm] = useState({ name: '', email: '', interest: 'Buying', message: '' });
+  const [addFormErrors, setAddFormErrors] = useState({}); // FIX: CRIT-005 — inline validation errors
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const { leads, isLoading, reassignLead: doReassign, fetchAvailableRealtors, createInquiry, updateLeadStatus } = useLeads();
 
   const handleAddLead = async () => {
-    if (!addForm.name.trim() || !addForm.email.trim()) {
-      addToast({ type: 'error', title: 'Missing info', desc: 'Name and email are required.' });
+    // FIX: CRIT-005 — collect all field errors and display them inline instead of silently failing
+    const errors = {};
+    if (!addForm.name.trim()) errors.name = 'Full name is required';
+    if (!addForm.email.trim()) errors.email = 'Email address is required';
+    else if (!/^[^@]+@[^@]+\.[^@]+$/.test(addForm.email)) errors.email = 'Enter a valid email address';
+    if (!addForm.message.trim()) errors.message = 'Please add a note for this lead';
+    if (Object.keys(errors).length) {
+      setAddFormErrors(errors);
       return;
     }
-    if (!addForm.interest) {
-      addToast({ type: 'error', title: 'Missing info', desc: 'Please select an interest type.' });
-      return;
-    }
-    if (!addForm.message.trim()) {
-      addToast({ type: 'error', title: 'Missing info', desc: 'Please add a message or note for this lead.' });
-      return;
-    }
+    setAddFormErrors({});
     setIsSubmitting(true);
     const { error } = await createInquiry({
       ...addForm,
@@ -56,6 +56,7 @@ export default function LeadsPage() {
       addToast({ type: 'success', title: 'Lead added', desc: 'Successfully created manual lead entry.' });
       setAddOpen(false);
       setAddForm({ name: '', email: '', interest: 'Buying', message: '' });
+      setAddFormErrors({});
     }
   };
 
@@ -298,11 +299,11 @@ export default function LeadsPage() {
       {/* Add Lead Modal */}
       <Modal
         open={addOpen}
-        onClose={() => setAddOpen(false)}
+        onClose={() => { setAddOpen(false); setAddFormErrors({}); }}
         title="Add Lead"
         footer={
           <>
-            <Button variant="outline" onClick={() => setAddOpen(false)}>Cancel</Button>
+            <Button variant="outline" onClick={() => { setAddOpen(false); setAddFormErrors({}); }}>Cancel</Button>
             <Button variant="primary" onClick={handleAddLead} disabled={isSubmitting}>
               {isSubmitting ? 'Adding...' : 'Add Lead'}
             </Button>
@@ -315,15 +316,22 @@ export default function LeadsPage() {
             { label: 'Email Address', key: 'email', placeholder: 'jane@example.com', type: 'email' },
           ].map(f => (
             <div key={f.key}>
-              <label className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 block">{f.label}</label>
+              <label className="text-xs text-gray-500 uppercase tracking-wider mb-1.5 block">{f.label} *</label>
               <input
                 type={f.type}
-                required
                 placeholder={f.placeholder}
                 value={addForm[f.key]}
-                onChange={e => setAddForm(p => ({ ...p, [f.key]: e.target.value }))}
-                className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none"
+                onChange={e => {
+                  setAddForm(p => ({ ...p, [f.key]: e.target.value }));
+                  if (addFormErrors[f.key]) setAddFormErrors(p => ({ ...p, [f.key]: '' }));
+                }}
+                className="w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none"
+                style={{ borderColor: addFormErrors[f.key] ? '#EF4444' : '#E5E7EB', background: addFormErrors[f.key] ? '#FFF5F5' : undefined }}
               />
+              {/* FIX: CRIT-005 — inline error messages */}
+              {addFormErrors[f.key] && (
+                <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{addFormErrors[f.key]}</p>
+              )}
             </div>
           ))}
           <div>
@@ -344,9 +352,16 @@ export default function LeadsPage() {
               rows={3}
               placeholder="Any additional notes…"
               value={addForm.message}
-              onChange={e => setAddForm(p => ({ ...p, message: e.target.value }))}
-              className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none resize-none"
+              onChange={e => {
+                setAddForm(p => ({ ...p, message: e.target.value }));
+                if (addFormErrors.message) setAddFormErrors(p => ({ ...p, message: '' }));
+              }}
+              className="w-full px-3 py-2.5 text-sm border rounded-lg focus:outline-none resize-none"
+              style={{ borderColor: addFormErrors.message ? '#EF4444' : '#E5E7EB', background: addFormErrors.message ? '#FFF5F5' : undefined }}
             />
+            {addFormErrors.message && (
+              <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{addFormErrors.message}</p>
+            )}
           </div>
         </div>
       </Modal>

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AppLayout from '../../components/layout/AppLayout';
 import ListingCard from '../../components/shared/ListingCard';
 import Tabs from '../../components/ui/Tabs';
@@ -23,6 +24,7 @@ const defaultForm = {
 export default function ListingsPage() {
   const { user, profile } = useAuth();
   const { addToast } = useToast();
+  const navigate = useNavigate(); // FIX: CRIT-007 — for Edit button navigation
   const [activeTab, setActiveTab] = useState('all');
   const [search, setSearch]       = useState('');
   const [addOpen, setAddOpen]     = useState(false);
@@ -401,6 +403,7 @@ export default function ListingsPage() {
                 key={listing.id}
                 listing={listing}
                 showActions
+                onEdit={() => navigate(`/listings/${listing.id}/edit`)}
                 onApprove={() => handleListingAction(listing.id, 'approve')}
                 onReject={() => handleListingAction(listing.id, 'reject')}
                 onSubmit={() => handleListingAction(listing.id, 'submit')}

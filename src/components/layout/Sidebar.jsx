@@ -21,6 +21,7 @@ import {
   HiExclamationTriangle,
   HiArrowDownTray,
   HiDocumentText,
+  HiCheckBadge,
 } from 'react-icons/hi2';
 
 // Reusable icon wrapper for consistency
@@ -32,6 +33,7 @@ const NAV = {
   admin: [
     { key: 'dashboard',    label: 'Dashboard',    icon: HiViewColumns,         to: '/admin/dashboard' },
     { key: 'users',        label: 'Users',         icon: HiUsers,               to: '/admin/users' },
+    { key: 'approvals',   label: 'Approvals',     icon: HiCheckBadge,          to: '/admin/approvals' },
     { key: 'listings',     label: 'Listings',      icon: HiHomeModern,          to: '/admin/listings' },
     { key: 'leads',        label: 'Leads',         icon: HiChatBubbleLeftRight,  to: '/admin/leads' },
     { key: 'enquiries',   label: 'Enquiries',     icon: HiEnvelope,            to: '/admin/enquiries' },
@@ -106,7 +108,10 @@ export default function Sidebar({ role: roleProp = 'realtor', onClose }) {
 
   const handleSignOut = async () => {
     try { await logout(); } catch { /* ignore */ }
-    navigate('/login');
+    // FIX: CRIT-004 — Use hard redirect instead of navigate() to prevent race condition
+    // where React state (auth.profile) is not yet null when LoginPage mounts,
+    // causing the redirect-if-authenticated useEffect to loop back to admin dashboard.
+    window.location.replace('/login');
   };
 
   return (
