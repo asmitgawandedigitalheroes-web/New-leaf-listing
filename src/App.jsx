@@ -44,6 +44,7 @@ import SubscriptionsPage    from './pages/app/admin/SubscriptionsPage';
 import CommissionsAdminPage from './pages/app/admin/CommissionsAdminPage';
 import AuditLogPage         from './pages/app/admin/AuditLogPage';
 import UsersPage            from './pages/app/admin/UsersPage';
+import ApprovalsPage        from './pages/app/admin/ApprovalsPage';
 import SettingsPage         from './pages/app/admin/SettingsPage';
 import AdminPricingPage     from './pages/app/admin/PricingPage';
 import EnquiriesPage        from './pages/app/admin/EnquiriesPage';
@@ -168,6 +169,12 @@ export default function App() {
             <Route path="/admin/users" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <UsersPage />
+              </ProtectedRoute>
+            } />
+            {/* FIX: CRIT-002 — Added missing /admin/approvals route */}
+            <Route path="/admin/approvals" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <ApprovalsPage />
               </ProtectedRoute>
             } />
 

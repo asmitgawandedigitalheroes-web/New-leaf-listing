@@ -236,7 +236,16 @@ export default function SubscriptionsPage() {
                           {s.status === 'past_due' && (
                             <Button variant="outline" size="sm" onClick={() => addToast({ type: 'info', title: 'Retry payment', desc: 'Webhook will retry automatically, or connect Stripe.' })}>Retry</Button>
                           )}
-                          <Button variant="ghost" size="sm" onClick={() => window.open(`https://dashboard.stripe.com/customers/${s.stripe_customer_id}`, '_blank')}>View</Button>
+                          {/* FIX: CRIT-003 — Guard against null stripe_customer_id to prevent customers/null URL */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            disabled={!s.stripe_customer_id}
+                            title={s.stripe_customer_id ? 'View in Stripe Dashboard' : 'No Stripe customer ID linked'}
+                            onClick={() => s.stripe_customer_id && window.open(`https://dashboard.stripe.com/customers/${s.stripe_customer_id}`, '_blank')}
+                          >
+                            View
+                          </Button>
                         </div>
                       </td>
                     </tr>
