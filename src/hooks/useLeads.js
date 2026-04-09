@@ -37,7 +37,8 @@ export function useLeads() {
         .select(`
           *,
           listing:listings(title, address, city, state),
-          assigned_realtor:profiles!leads_assigned_realtor_id_fkey(full_name, email)
+          assigned_realtor:profiles!leads_assigned_realtor_id_fkey(full_name, email),
+          assigned_director:profiles!leads_assigned_director_id_fkey(full_name, email)
         `)
         .order('created_at', { ascending: false });
 
