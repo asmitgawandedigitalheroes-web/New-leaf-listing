@@ -89,6 +89,12 @@ async function sendInviteEmail({ to, fullName, role, inviteUrl, isDetailedInvite
 
   const html = buildInviteEmailHtml({ fullName, role, inviteUrl, isDetailedInvite });
 
+  // Refresh session to ensure the access token is valid before calling the edge function
+  const { error: refreshError } = await supabase.auth.refreshSession();
+  if (refreshError) {
+    console.warn('[sendInviteEmail] Session refresh failed, proceeding with current token:', refreshError.message);
+  }
+
   const { data, error } = await supabase.functions.invoke('send-email', {
     body: { to, subject, html },
   });
