@@ -19,13 +19,13 @@ import { useAuth } from '../../context/AuthContext';
 import { supabase } from '../../lib/supabase';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 
-// Demo credentials — only available in development builds.
+// Demo credentials — available in all builds for easy testing.
 // Set VITE_DEMO_ADMIN_EMAIL etc. in .env.local to override defaults.
-const DEMO_CREDS = import.meta.env.DEV ? {
+const DEMO_CREDS = {
   admin:    { email: import.meta.env.VITE_DEMO_ADMIN_EMAIL    ?? 'admin@nlvlistings.com',    password: import.meta.env.VITE_DEMO_ADMIN_PASS    ?? 'admin123' },
   director: { email: import.meta.env.VITE_DEMO_DIRECTOR_EMAIL ?? 'director@nlvlistings.com', password: import.meta.env.VITE_DEMO_DIRECTOR_PASS ?? 'director123' },
   realtor:  { email: import.meta.env.VITE_DEMO_REALTOR_EMAIL  ?? 'realtor@nlvlistings.com',  password: import.meta.env.VITE_DEMO_REALTOR_PASS  ?? 'realtor123' },
-} : null;
+};
 
 // NLV Brand Colors
 const P   = '#D4AF37';
