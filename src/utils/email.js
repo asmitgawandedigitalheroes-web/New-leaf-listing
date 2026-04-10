@@ -1,5 +1,8 @@
 import { supabase } from '../lib/supabase';
 
+// Get the Supabase URL for edge function calls
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://jrpenintcikamlpzxwdm.supabase.co';
+
 function buildInviteEmailHtml({ fullName, role, inviteUrl, territory, isDetailedInvite }) {
   const roleLabel = role === 'director' ? 'Regional Director' : 'Realtor';
   const greeting  = fullName ? `Hi ${fullName},` : 'Hi there,';
@@ -70,30 +73,38 @@ export async function sendInviteEmail({ to, fullName, role, inviteUrl, territory
   const html = buildInviteEmailHtml({ fullName, role, inviteUrl, territory, isDetailedInvite });
 
   // Use refreshSession to guarantee a non-expired access token.
-  // getSession() can return a stale token if the background refresh hasn't
-  // completed yet, causing the edge function to reject with 401.
   const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-  const session = refreshData?.session;
+  let accessToken = refreshData?.session?.access_token;
 
-  if (refreshError || !session?.access_token) {
-    // Fall back to the existing session if refresh fails (e.g. offline)
+  if (refreshError || !accessToken) {
+    // Fall back to the existing session if refresh fails
     const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-    const fallbackSession = sessionData?.session;
-    if (sessionError || !fallbackSession?.access_token) {
+    accessToken = sessionData?.session?.access_token;
+    if (sessionError || !accessToken) {
       return { sent: false, error: 'Not authenticated. Please log in again.' };
     }
-    supabase.functions.setAuth(fallbackSession.access_token);
-  } else {
-    // Explicitly push the fresh token into the Functions client so it is always
-    // present in the Authorization header — regardless of SDK auto-injection timing.
-    supabase.functions.setAuth(session.access_token);
   }
 
-  const { data, error } = await supabase.functions.invoke('send-email', {
-    body: { to, subject, html },
-  });
+  // Use direct fetch instead of supabase.functions.invoke since JWT is disabled
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/send-email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({ to, subject, html }),
+    });
 
-  if (error) return { sent: false, error: error.message };
-  if (data?.error) return { sent: false, error: data.error };
-  return { sent: true, error: null };
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { sent: false, error: data.error || `HTTP ${response.status}` };
+    }
+    
+    if (data?.error) return { sent: false, error: data.error };
+    return { sent: true, error: null };
+  } catch (fetchError) {
+    return { sent: false, error: fetchError.message };
+  }
 }

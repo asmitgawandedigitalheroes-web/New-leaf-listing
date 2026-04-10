@@ -100,7 +100,10 @@ async function sendInviteEmailImpl({ to, fullName, role, inviteUrl, isDetailedIn
     body: { to, subject, html },
   });
 
-  if (error) return { sent: false, error: error.message };
+  if (error) {
+    console.error('[sendInviteEmail] Edge Function error:', error);
+    return { sent: false, error: error.message };
+  }
   if (data?.error) return { sent: false, error: data.error };
   return { sent: true, error: null };
 }
