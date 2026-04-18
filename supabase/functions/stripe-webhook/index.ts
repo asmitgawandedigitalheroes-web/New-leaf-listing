@@ -92,7 +92,7 @@ serve(async (req: Request) => {
 
   try {
     const body = await req.text();
-    const event = stripe.webhooks.constructEvent(
+    const event = await stripe.webhooks.constructEventAsync(
       body,
       signature!,
       Deno.env.get("STRIPE_WEBHOOK_SECRET")!
@@ -121,10 +121,11 @@ serve(async (req: Request) => {
             const amountCents = session.amount_total ?? 0;
             const amount = amountCents / 100;
 
-            // Single atomic RPC: UPDATE listings + INSERT payments +
-            // INSERT listing_audit_log all within one DB transaction.
-            // If any step fails, all three roll back — no partial writes.
-            // Returns the new payment row ID for commission processing.
+            // Prefer the atomic RPC (handles payment + audit in one transaction).
+            // If the RPC doesn't exist yet (migration pending), fall back to a
+            // direct UPDATE + INSERT so the badge is always applied on payment.
+            let paymentId: string | null = null;
+
             const { data: upgradeRows, error: upgradeErr } = await supabaseAdmin
               .rpc("apply_listing_upgrade_atomic", {
                 p_listing_id:            listingId,
@@ -135,11 +136,44 @@ serve(async (req: Request) => {
               });
 
             if (upgradeErr) {
-              console.error(`[Webhook] apply_listing_upgrade_atomic error: ${upgradeErr.message}`);
-              break;
-            }
+              console.error(`[Webhook] apply_listing_upgrade_atomic error: ${upgradeErr.message} — falling back to direct update`);
 
-            const paymentId = upgradeRows?.[0]?.payment_id ?? null;
+              // Fallback: update listing directly so the featured/top badge appears
+              const { error: directListingErr } = await supabaseAdmin
+                .from("listings")
+                .update({
+                  upgrade_type: upgradeType,
+                  updated_at:   new Date().toISOString(),
+                })
+                .eq("id", listingId);
+
+              if (directListingErr) {
+                console.error(`[Webhook] Direct listing update failed: ${directListingErr.message}`);
+                break;
+              }
+
+              // Fallback: insert payment row (idempotent via ON CONFLICT)
+              const { data: fallbackPmt } = await supabaseAdmin
+                .from("payments")
+                .upsert(
+                  {
+                    user_id:           userId ?? null,
+                    type:              "listing_upgrade",
+                    amount:            amount,
+                    status:            "succeeded",
+                    stripe_payment_id: session.payment_intent as string,
+                    description:       `Listing upgrade to ${upgradeType} for listing ${listingId}`,
+                  },
+                  { onConflict: "stripe_payment_id", ignoreDuplicates: true }
+                )
+                .select("id")
+                .maybeSingle();
+
+              paymentId = fallbackPmt?.id ?? null;
+              console.log(`[Webhook] Fallback: listing ${listingId} upgraded to ${upgradeType}`);
+            } else {
+              paymentId = upgradeRows?.[0]?.payment_id ?? null;
+            }
             console.log(`[Webhook] Listing ${listingId} upgraded to ${upgradeType} (payment: ${paymentId})`);
 
             // Commissions for the upgrade payment
@@ -190,10 +224,12 @@ serve(async (req: Request) => {
           // For admin-invited users the profile starts at status="pending"; this
           // is the single moment we flip them to active (trial counts as active access).
           const now = new Date().toISOString();
-          await supabaseAdmin
+          const { data: activatedProfile } = await supabaseAdmin
             .from("profiles")
             .update({ status: "active", verified_at: now })
-            .eq("id", userId);
+            .eq("id", userId)
+            .select("referred_by")
+            .single();
 
           // Record the checkout payment and trigger commission processing.
           // Use session.amount_total (what Stripe actually charged) rather than
@@ -229,6 +265,36 @@ serve(async (req: Request) => {
               await notifyPaymentSucceeded(userId, planAmount, `${planKey} subscription`).catch(
                 err => console.error(`[Webhook] Notification error: ${err.message}`)
               );
+            }
+          }
+
+          // ── Referral commission: 10% of first month to referrer ──────────
+          const referrerId = activatedProfile?.referred_by ?? null;
+          if (referrerId) {
+            const planAmount = (session.amount_total ?? 0) / 100;
+            const referralCommission = parseFloat((planAmount * 0.10).toFixed(2));
+            if (referralCommission > 0) {
+              const { error: refErr } = await supabaseAdmin
+                .from("commissions")
+                .insert({
+                  recipient_user_id: referrerId,
+                  type: "referral",
+                  amount: referralCommission,
+                  status: "pending",
+                  metadata: {
+                    referred_user_id: userId,
+                    plan: planKey,
+                    plan_amount: planAmount,
+                    note: "10% referral reward for first subscription payment",
+                  },
+                });
+              if (refErr) {
+                console.error(`[Webhook] Referral commission insert error: ${refErr.message}`);
+              } else {
+                console.log(`[Webhook] Referral commission $${referralCommission} created for referrer ${referrerId}`);
+                // Notify the referrer
+                await notifyPaymentSucceeded(referrerId, referralCommission, "referral reward").catch(() => {});
+              }
             }
           }
         }
@@ -275,6 +341,7 @@ serve(async (req: Request) => {
               status: "succeeded",
               stripe_payment_id: stripeInvoiceId,
               description: `Invoice paid for subscription ${subscriptionId}`,
+              invoice_pdf_url: invoice.invoice_pdf ?? null,
             })
             .select("id")
             .single();

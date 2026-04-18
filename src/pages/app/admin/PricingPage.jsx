@@ -14,7 +14,8 @@ import {
   HiPencil,
   HiHomeModern,
   HiChevronRight,
-  HiCog6Tooth
+  HiCog6Tooth,
+  HiExclamationTriangle,
 } from 'react-icons/hi2';
 
 const P      = '#D4AF37';
@@ -197,6 +198,36 @@ export default function AdminPricingPage() {
                           )}
                         </div>
                       </div>
+
+                      {/* Stripe Price ID status */}
+                      {plan.slug !== 'sponsor' && (
+                        <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 12, marginTop: 12 }}>
+                          <div style={{ fontSize: 10, fontWeight: 700, color: LGRAY, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+                            Stripe Price IDs
+                          </div>
+                          {[
+                            { label: 'Monthly', value: plan.stripe_monthly_price_id },
+                            { label: 'Annual',  value: plan.stripe_annual_price_id  },
+                          ].map(({ label, value }) => {
+                            const isSet = !!value;
+                            return (
+                              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
+                                {isSet
+                                  ? <HiCheckCircle size={13} color="#22C55E" style={{ flexShrink: 0 }} />
+                                  : <HiExclamationTriangle size={13} color="#F59E0B" style={{ flexShrink: 0 }} />
+                                }
+                                <span style={{ fontSize: 10, color: LGRAY, flexShrink: 0 }}>{label}:</span>
+                                {isSet
+                                  ? <span style={{ fontSize: 10, fontFamily: 'monospace', color: OS, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {value.slice(0, 20)}…
+                                    </span>
+                                  : <span style={{ fontSize: 10, color: '#F59E0B', fontWeight: 600 }}>Not set — click Edit Details</span>
+                                }
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
 
                       <div style={{ marginTop: 16 }}>
                         <Button variant="outline" size="sm" fullWidth onClick={() => setEditingPlan(plan)}>

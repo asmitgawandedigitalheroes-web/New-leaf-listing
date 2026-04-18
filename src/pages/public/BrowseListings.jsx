@@ -190,6 +190,8 @@ export default function BrowseListings() {
   const [propType,     setPropType]     = useState('Any Type');
   const [viewMode,     setViewMode]     = useState('grid'); // 'grid' | 'list'
   const [sidebarOpen,  setSidebarOpen]  = useState(false);
+  const [page,         setPage]         = useState(1);
+  const PAGE_SIZE = 9;
 
   // usePublicListings handles auth-free fetching with priority sort (top → featured → standard)
   const { listings, isLoading } = usePublicListings({
@@ -203,10 +205,14 @@ export default function BrowseListings() {
   // Priority sort is already applied by the hook (top → featured → standard → newest).
   // Secondary client-side price sorts override when user selects price ordering.
   const filtered = useMemo(() => {
+    setPage(1); // reset to first page on any filter/sort change
     if (sort === 'price-asc')  return [...listings].sort((a, b) => a.price - b.price);
     if (sort === 'price-desc') return [...listings].sort((a, b) => b.price - a.price);
     return listings; // 'newest' — keep hook's priority sort
   }, [listings, sort]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const visibleListings = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   const clearAll = () => {
     setSearch(''); setTierFilter('all'); setMinPrice(''); setMaxPrice(''); setPropType('Any Type');
@@ -421,7 +427,7 @@ export default function BrowseListings() {
               ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5'
               : 'flex flex-col gap-4'
             }>
-              {filtered.map(listing => (
+              {visibleListings.map(listing => (
                   viewMode === 'grid'
                     ? <ListingCard key={listing.id} listing={listing} />
                     : (
@@ -502,16 +508,61 @@ export default function BrowseListings() {
               </div>
             )}
 
-            {/* Load more */}
-            {filtered.length > 0 && (
-              <div className="mt-10 text-center">
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="mt-10 flex items-center justify-center gap-1.5">
+                {/* Prev */}
                 <button
-                  className="px-8 py-3 text-sm font-semibold rounded-xl transition-all font-headline"
+                  disabled={page === 1}
+                  onClick={() => { setPage(p => p - 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
                   style={{ border: `1px solid ${BORDER}`, color: OSV, background: '#fff' }}
-                  onMouseEnter={e => { e.currentTarget.style.borderColor = P; e.currentTarget.style.color = S; e.currentTarget.style.background = SCL; }}
-                  onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = OSV; e.currentTarget.style.background = '#fff'; }}
+                  onMouseEnter={e => { if (page !== 1) { e.currentTarget.style.borderColor = P; e.currentTarget.style.color = S; } }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = OSV; }}
                 >
-                  Load More Properties
+                  ← Prev
+                </button>
+
+                {/* Page numbers */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
+                  .reduce((acc, n, idx, arr) => {
+                    if (idx > 0 && n - arr[idx - 1] > 1) acc.push('…');
+                    acc.push(n);
+                    return acc;
+                  }, [])
+                  .map((n, i) =>
+                    n === '…' ? (
+                      <span key={`ellipsis-${i}`} className="px-2 text-sm" style={{ color: LGRAY }}>…</span>
+                    ) : (
+                      <button
+                        key={n}
+                        onClick={() => { setPage(n); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                        className="w-9 h-9 rounded-lg text-sm font-semibold transition-all"
+                        style={
+                          page === n
+                            ? { background: S, color: '#fff', border: `1px solid ${S}` }
+                            : { background: '#fff', color: OSV, border: `1px solid ${BORDER}` }
+                        }
+                        onMouseEnter={e => { if (page !== n) { e.currentTarget.style.borderColor = P; e.currentTarget.style.color = S; } }}
+                        onMouseLeave={e => { if (page !== n) { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = OSV; } }}
+                      >
+                        {n}
+                      </button>
+                    )
+                  )
+                }
+
+                {/* Next */}
+                <button
+                  disabled={page === totalPages}
+                  onClick={() => { setPage(p => p + 1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                  className="px-3 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+                  style={{ border: `1px solid ${BORDER}`, color: OSV, background: '#fff' }}
+                  onMouseEnter={e => { if (page !== totalPages) { e.currentTarget.style.borderColor = P; e.currentTarget.style.color = S; } }}
+                  onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = OSV; }}
+                >
+                  Next →
                 </button>
               </div>
             )}

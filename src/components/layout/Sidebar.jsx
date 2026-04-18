@@ -24,6 +24,7 @@ import {
   HiCheckBadge,
   HiUserPlus,
   HiShieldCheck,
+  HiPresentationChartLine,
 } from 'react-icons/hi2';
 
 // Reusable icon wrapper for consistency
@@ -61,14 +62,15 @@ const NAV = {
     { key: 'contracts',       label: 'Legal & Contracts',  icon: HiDocumentText,         to: '/director/contracts' },
   ],
   realtor: [
-    { key: 'dashboard',    label: 'Dashboard',     icon: HiViewColumns,         to: '/realtor/dashboard' },
-    { key: 'listings',     label: 'My Listings',   icon: HiHomeModern,          to: '/realtor/listings' },
-    { key: 'leads',        label: 'My Leads',      icon: HiChatBubbleLeftRight,  to: '/realtor/leads' },
-    { key: 'messages',     label: 'Messages',      icon: HiEnvelope,            to: '/realtor/messages' },
-    { key: 'referrals',    label: 'NLV Referrals', icon: HiSparkles,            to: '/realtor/referrals' },
-    { key: 'commissions',  label: 'Commissions',   icon: HiBanknotes,           to: '/realtor/commissions' },
-    { key: 'billing',      label: 'Billing',       icon: HiCreditCard,          to: '/realtor/billing' },
-    { key: 'profile',      label: 'Profile',       icon: HiUserCircle,          to: '/realtor/profile' },
+    { key: 'dashboard',    label: 'Dashboard',     icon: HiViewColumns,              to: '/realtor/dashboard' },
+    { key: 'listings',     label: 'My Listings',   icon: HiHomeModern,               to: '/realtor/listings' },
+    { key: 'leads',        label: 'My Leads',      icon: HiChatBubbleLeftRight,      to: '/realtor/leads' },
+    { key: 'analytics',    label: 'Analytics',     icon: HiPresentationChartLine,    to: '/realtor/analytics' },
+    { key: 'messages',     label: 'Messages',      icon: HiEnvelope,                 to: '/realtor/messages' },
+    { key: 'referrals',    label: 'NLV Referrals', icon: HiSparkles,                 to: '/realtor/referrals' },
+    { key: 'commissions',  label: 'Commissions',   icon: HiBanknotes,                to: '/realtor/commissions' },
+    { key: 'billing',      label: 'Billing',       icon: HiCreditCard,               to: '/realtor/billing' },
+    { key: 'profile',      label: 'Profile',       icon: HiUserCircle,               to: '/realtor/profile' },
   ],
 };
 

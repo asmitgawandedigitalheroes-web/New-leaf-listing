@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AppLayout from '../../../components/layout/AppLayout';
 import { SectionCard } from '../../../components/ui/Card';
 import Button from '../../../components/ui/Button';
@@ -10,20 +10,20 @@ import { supabase } from '../../../lib/supabase';
 import { HiCheckCircle, HiClock, HiLockClosed } from 'react-icons/hi2';
 
 const PLAN_STYLES = {
-  starter:   { bg: '#F3F4F6', text: '#4B5563', price: '$9/mo' },
-  pro:       { bg: 'rgba(212,175,55,0.12)', text: '#B8962E', price: '$29/mo' },
-  dominator: { bg: '#EDE9FE', text: '#5B21B6', price: '$79/mo' },
-  // OBS-003: Aligned to "Contact Sales" to match PricingPage (was $199/mo)
-  sponsor:   { bg: '#DBEAFE', text: '#1D4ED8', price: 'Contact Sales' },
+  starter:   { bg: '#F3F4F6',               text: '#4B5563', price: '$99/mo'        },
+  pro:       { bg: 'rgba(212,175,55,0.12)', text: '#B8962E', price: '$199/mo'       },
+  dominator: { bg: '#EDE9FE',               text: '#5B21B6', price: '$299/mo'       },
+  sponsor:   { bg: '#DBEAFE',               text: '#1D4ED8', price: 'Contact Sales' },
 };
 
 export default function RealtorProfilePage() {
-  const { profile, subscription, updateProfile, isLoading: authLoading } = useAuth();
+  const { user, profile, subscription, updateProfile, isLoading: authLoading } = useAuth();
   const { addToast } = useToast();
   const [form, setForm] = useState({ full_name: '', phone: '', company: '', city: '', state: '', license_number: '' });
   const [isSaving, setIsSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [referralCopied, setReferralCopied] = useState(false);
+  const [referralStats, setReferralStats] = useState({ referrals: 0, earned: 0, pending: 0 });
 
   // BUG-006: Security / password-change state
   const [pwForm, setPwForm] = useState({ newPassword: '', confirmPassword: '' });
@@ -43,6 +43,22 @@ export default function RealtorProfilePage() {
       });
     }
   }, [profile]);
+
+  // Fetch referral stats: how many signed up via this user + commissions earned
+  useEffect(() => {
+    if (!user?.id) return;
+    Promise.all([
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', user.id),
+      supabase.from('commissions').select('amount, status').eq('recipient_user_id', user.id).eq('type', 'referral'),
+    ]).then(([refRes, commRes]) => {
+      const comms = commRes.data || [];
+      setReferralStats({
+        referrals: refRes.count ?? 0,
+        earned:    comms.filter(c => c.status === 'paid').reduce((s, c) => s + Number(c.amount), 0),
+        pending:   comms.filter(c => c.status === 'pending').reduce((s, c) => s + Number(c.amount), 0),
+      });
+    });
+  }, [user?.id]);
 
   const handleSave = async () => {
     if (!form.full_name.trim()) {
@@ -84,10 +100,8 @@ export default function RealtorProfilePage() {
   const planKey = subscription?.plan || null;
   const planStyle = PLAN_STYLES[planKey] || null;
 
-  const referralCode = profile?.full_name
-    ? profile.full_name.toUpperCase().replace(/\s+/g, '_').slice(0, 20)
-    : (profile?.id?.slice(0, 8) || 'MY_REF');
-  const referralLink = `${APP_URL}/join?ref=${referralCode}`;
+  const referralCode = profile?.referral_code || profile?.id || 'MY_REF';
+  const referralLink = `${APP_URL}/signup?ref=${referralCode}`;
 
   const handlePasswordChange = async () => {
     const errors = {};
@@ -317,7 +331,23 @@ export default function RealtorProfilePage() {
 
         {/* Referral */}
         <SectionCard title="NLV Referral Program">
-          <div className="px-6 py-5 flex flex-col gap-4">
+          <div className="px-6 py-5 flex flex-col gap-5">
+            {/* Stats row */}
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: 'Referrals',     value: referralStats.referrals,                    color: '#1F4D3A' },
+                { label: 'Earned',        value: `$${referralStats.earned.toFixed(2)}`,      color: '#D4AF37' },
+                { label: 'Pending',       value: `$${referralStats.pending.toFixed(2)}`,     color: '#B8962E' },
+              ].map(s => (
+                <div key={s.label} className="rounded-xl p-3 text-center"
+                  style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                  <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: '#9CA3AF' }}>{s.label}</p>
+                  <p className="text-lg font-black" style={{ color: s.color }}>{s.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {/* Referral link */}
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex-1 px-3 py-2 bg-gray-50 rounded-lg font-mono text-sm text-gray-700 border border-gray-200 truncate">
                 {referralLink}
@@ -327,7 +357,7 @@ export default function RealtorProfilePage() {
               </Button>
             </div>
             <p className="text-xs text-gray-400">
-              Earn commission when someone signs up through your referral link and activates a paid plan.
+              Share your link and earn <strong>10% of the first month's subscription</strong> when someone signs up and activates a paid plan.
             </p>
           </div>
         </SectionCard>

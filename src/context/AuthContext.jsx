@@ -176,6 +176,8 @@ export function AuthProvider({ children }) {
             id: authUser.id,
             email: authUser.email,
             full_name: meta.full_name || authUser.user_metadata?.full_name || '',
+            referral_code: authUser.id,
+            referred_by: meta.referred_by || null,
             company: meta.company || null,
             role: 'realtor',
             phone: meta.phone || null,
@@ -352,7 +354,7 @@ export function AuthProvider({ children }) {
     country = null, state = null, city = null, role = 'realtor',
     territory_id = null, assigned_director_id = null,
     license_number = null, license_state = null, license_expiry = null,
-    invite_token = null,
+    invite_token = null, referred_by = null,
   }) => {
     setIsLoading(true);
 
@@ -376,6 +378,7 @@ export function AuthProvider({ children }) {
       license_state: license_state || null,
       license_expiry: license_expiry || null,
       invite_approved: !!invite_token,
+      referred_by: referred_by || null,
     };
 
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -427,6 +430,8 @@ export function AuthProvider({ children }) {
           license_expiry: license_expiry || null,
           status: initialStatus,
           accepted_terms_at: new Date().toISOString(),
+          referral_code: authData.user.id,
+          referred_by: referred_by || null,
         });
 
       if (profileError) {

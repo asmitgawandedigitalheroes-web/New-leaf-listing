@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import AppLayout from '../../../components/layout/AppLayout';
 import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
@@ -13,6 +13,7 @@ import { maskEmail, maskName } from '../../../utils/masking';
 import { supabase } from '../../../lib/supabase';
 import { ActionPill } from '../../../components/shared/TableActions';
 import MobileCard, { MobileCardRow, MobileCardActions } from '../../../components/shared/MobileCard';
+import { usePlanAccess } from '../../../hooks/usePlanAccess';
 
 const STATUS_TABS = ['all', 'new', 'contacted', 'in_progress', 'closed'];
 
@@ -41,8 +42,9 @@ function normalizeStatus(status) {
 const SCORE_COLOR = (s) => s >= 80 ? '#1F4D3A' : s >= 50 ? '#D4AF37' : '#DC2626';
 
 export default function RealtorLeadsPage() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
   const { addToast } = useToast();
+  const { planLimits } = usePlanAccess();
   const [activeTab, setActiveTab]   = useState('all');
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerLead, setDrawerLead] = useState(null);
@@ -53,7 +55,24 @@ export default function RealtorLeadsPage() {
   const [disputeLead, setDisputeLead] = useState(null);
   const [disputeForm, setDisputeForm] = useState({ subject: '', description: '' });
   const [disputeSubmitting, setDisputeSubmitting] = useState(false);
+  const [monthlyLeadCount, setMonthlyLeadCount] = useState(0);
   const { leads, updateLeadStatus, isLoading, createInquiry, addLeadNote } = useLeads();
+
+  // Count leads assigned this month to enforce Starter plan cap
+  useEffect(() => {
+    if (!user?.id || planLimits.leads === -1) return;
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    supabase
+      .from('leads')
+      .select('id', { count: 'exact', head: true })
+      .eq('assigned_realtor_id', user.id)
+      .gte('created_at', monthStart.toISOString())
+      .then(({ count }) => setMonthlyLeadCount(count ?? 0));
+  }, [user?.id, planLimits.leads, leads.length]);
+
+  const leadLimitReached = planLimits.leads !== -1 && monthlyLeadCount >= planLimits.leads;
 
   const handleAddLead = async () => {
     if (!addForm.name.trim() || !addForm.email.trim()) {
@@ -136,10 +155,41 @@ export default function RealtorLeadsPage() {
             <h2 className="text-xl font-bold text-gray-900">My Leads</h2>
             <p className="text-sm text-gray-400 mt-0.5">{leads.length} active leads</p>
           </div>
-          <Button variant="primary" onClick={() => setAddOpen(true)}>
+          <Button
+            variant="primary"
+            onClick={() => {
+              if (leadLimitReached) {
+                addToast({ type: 'warning', title: `Monthly lead limit reached (${planLimits.leads}/mo)`, desc: 'Upgrade your plan for unlimited leads.' });
+                return;
+              }
+              setAddOpen(true);
+            }}
+          >
             + Add Lead
           </Button>
         </div>
+
+        {/* Monthly lead cap warning banner for Starter plan */}
+        {planLimits.leads !== -1 && (
+          <div className="mx-4 md:mx-6 mb-2 px-4 py-3 rounded-xl flex items-center gap-3"
+            style={{
+              background: leadLimitReached ? '#FEF2F2' : 'rgba(212,175,55,0.08)',
+              border: `1px solid ${leadLimitReached ? '#FECACA' : 'rgba(212,175,55,0.3)'}`,
+            }}>
+            <HiExclamationTriangle size={16} style={{ color: leadLimitReached ? '#DC2626' : '#D4AF37', flexShrink: 0 }} />
+            <p className="text-xs font-medium" style={{ color: leadLimitReached ? '#991B1B' : '#B8962E' }}>
+              {leadLimitReached
+                ? `You've reached your monthly lead limit (${planLimits.leads}). Upgrade to Pro Agent for unlimited leads.`
+                : `Monthly leads: ${monthlyLeadCount} / ${planLimits.leads} — Upgrade for unlimited.`}
+            </p>
+            {leadLimitReached && (
+              <a href="/realtor/billing" className="ml-auto text-xs font-bold no-underline px-3 py-1 rounded-lg"
+                style={{ background: '#DC2626', color: '#fff', whiteSpace: 'nowrap' }}>
+                Upgrade
+              </a>
+            )}
+          </div>
+        )}
 
         {/* Stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

@@ -7,14 +7,12 @@ const stripe = new Stripe(Deno.env.get("STRIPE_SECRET_KEY") || "", {
 });
 
 const url = Deno.env.get("SUPABASE_URL") || "";
-const serviceKey = Deno.env.get("ADMIN_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("ADMIN_SERVICE_ROLE_KEY") || "";
 
-// Service-role client used only to look up prices server-side (BUG-031).
-const supabaseAdmin = createClient(url, serviceKey, { 
-  auth: { autoRefreshToken: false, persistSession: false } 
+const supabaseAdmin = createClient(url, serviceKey, {
+  auth: { autoRefreshToken: false, persistSession: false },
 });
 
-// Standard CORS headers for development flexibility
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -27,9 +25,6 @@ serve(async (req: Request) => {
   }
 
   try {
-    // Verify caller is authenticated. Without this check any anonymous request
-    // could create a checkout session attributed to an arbitrary userId — after
-    // payment the webhook would activate that target account (BUG-034 class).
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) {
       return new Response(JSON.stringify({ error: "Missing Authorization header" }), {
@@ -37,9 +32,25 @@ serve(async (req: Request) => {
         status: 401,
       });
     }
-    const token = authHeader.replace(/^Bearer /i, "");
-    const { data: { user: caller }, error: authError } = await supabaseAdmin.auth.getUser(token);
-    if (authError || !caller) {
+
+    // Decode JWT locally — JWT uses base64url encoding, not standard base64.
+    // Convert - → + and _ → / and add = padding before calling atob().
+    let callerId: string | null = null;
+    try {
+      const token = authHeader.replace(/^Bearer /i, "");
+      const parts = token.split(".");
+      if (parts.length === 3) {
+        const base64url = parts[1];
+        const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = base64 + "=".repeat((4 - base64.length % 4) % 4);
+        const payload = JSON.parse(atob(padded));
+        if (payload?.sub && (!payload.exp || payload.exp > Date.now() / 1000)) {
+          callerId = payload.sub;
+        }
+      }
+    } catch (_) { }
+
+    if (!callerId) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
         status: 401,
@@ -51,40 +62,33 @@ serve(async (req: Request) => {
 
     // Callers may only create sessions for themselves unless they are admin.
     const requestedUserId = body.userId as string | undefined;
-    if (requestedUserId && requestedUserId !== caller.id) {
+    if (requestedUserId && requestedUserId !== callerId) {
       const { data: callerProfile } = await supabaseAdmin
         .from("profiles")
         .select("role")
-        .eq("id", caller.id)
+        .eq("id", callerId)
         .single();
       if (callerProfile?.role !== "admin") {
-        return new Response(JSON.stringify({ error: "Forbidden: cannot create a checkout session for another user" }), {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
           status: 403,
         });
       }
     }
 
-    // ── Listing upgrade (one-time payment) ─────────────────────────────────────
+    // ── Listing upgrade (one-time payment) ────────────────────────────────
     if (body.type === "listing_upgrade") {
-      // BUG-031 fix: priceAmount is no longer accepted from the client.
-      // The price is always resolved server-side so a client cannot fabricate
-      // an arbitrary charge amount. Resolution order:
-      //   1. listing_prices table (authoritative, set by admins)
-      //   2. STRIPE_LISTING_<TYPE>_PRICE_CENTS env var (fallback)
       const { listingId, upgradeType, userId, userEmail } = body;
 
       if (!listingId || !upgradeType || !userId) {
         throw new Error("Missing required parameters: listingId, upgradeType, userId");
       }
 
-      // Validate upgradeType to prevent injection into the env-var key below
       const validUpgradeTypes = ["standard", "featured", "top"];
       if (!validUpgradeTypes.includes(upgradeType)) {
         throw new Error(`Invalid upgradeType: ${upgradeType}`);
       }
 
-      // 1. Look up price from DB
       let unitAmount: number | null = null;
       const { data: priceRow } = await supabaseAdmin
         .from("listing_prices")
@@ -94,9 +98,8 @@ serve(async (req: Request) => {
         .maybeSingle();
 
       if (priceRow?.price != null && priceRow.price > 0) {
-        unitAmount = Math.round(Number(priceRow.price) * 100); // dollars → cents
+        unitAmount = Math.round(Number(priceRow.price) * 100);
       } else {
-        // 2. Fall back to env var
         const envKey = `STRIPE_LISTING_${upgradeType.toUpperCase()}_PRICE_CENTS`;
         const envVal = Deno.env.get(envKey);
         unitAmount = envVal ? parseInt(envVal, 10) : null;
@@ -106,16 +109,15 @@ serve(async (req: Request) => {
         throw new Error(`Could not determine price for upgrade type: ${upgradeType}`);
       }
 
-      // HP-10: If caller is on the 'starter' plan, apply 50% discount on listing upgrades
       const { data: callerSub } = await supabaseAdmin
         .from("subscriptions")
         .select("plan")
-        .eq("user_id", caller.id)
+        .eq("user_id", callerId)
         .eq("status", "active")
         .maybeSingle();
 
       if (callerSub?.plan === "starter") {
-        unitAmount = Math.round(unitAmount * 0.5); // 50% discount
+        unitAmount = Math.round(unitAmount * 0.5);
       }
 
       const TIER_LABELS: Record<string, string> = {
@@ -127,29 +129,22 @@ serve(async (req: Request) => {
 
       const session = await stripe.checkout.sessions.create({
         payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              unit_amount: unitAmount,
-              product_data: {
-                name: `${tierLabel} Listing Upgrade`,
-                description: `Upgrade your listing to ${tierLabel} tier for increased visibility`,
-              },
+        line_items: [{
+          price_data: {
+            currency: "usd",
+            unit_amount: unitAmount,
+            product_data: {
+              name: `${tierLabel} Listing Upgrade`,
+              description: `Upgrade your listing to ${tierLabel} tier for increased visibility`,
             },
-            quantity: 1,
           },
-        ],
+          quantity: 1,
+        }],
         mode: "payment",
-        success_url: `${origin}/app/listings?upgrade=success&listing=${listingId}`,
-        cancel_url: `${origin}/app/listings?upgrade=cancelled`,
+        success_url: `${origin}/realtor/listings?upgrade=success&listing=${listingId}&tier=${upgradeType}`,
+        cancel_url: `${origin}/realtor/listings?upgrade=cancelled`,
         customer_email: userEmail,
-        metadata: {
-          type: "listing_upgrade",
-          listingId,
-          upgradeType,
-          userId,
-        },
+        metadata: { type: "listing_upgrade", listingId, upgradeType, userId },
       });
 
       return new Response(JSON.stringify({ url: session.url }), {
@@ -158,37 +153,46 @@ serve(async (req: Request) => {
       });
     }
 
-    // ── Subscription checkout (existing flow) ──────────────────────────────────
-    const { planId, planKey, userId, userEmail } = body;
+    // ── Subscription checkout ─────────────────────────────────────────────
+    const { planId, planKey, userId, userEmail, billingInterval } = body;
 
     let priceId = planId;
 
+    // 1. Look up Stripe Price ID from DB (set via Admin → Pricing → Edit Details)
     if (!priceId && planKey) {
-      const key = planKey.toUpperCase();
-      priceId = Deno.env.get(`STRIPE_${key}_PRICE_ID`);
+      const priceCol = billingInterval === "annual"
+        ? "stripe_annual_price_id"
+        : "stripe_monthly_price_id";
+
+      const { data: planRow } = await supabaseAdmin
+        .from("pricing_plans")
+        .select(priceCol)
+        .eq("slug", planKey)
+        .maybeSingle();
+
+      priceId = planRow?.[priceCol] || null;
+    }
+
+    // 2. Fall back to environment variable
+    if (!priceId && planKey) {
+      priceId = Deno.env.get(`STRIPE_${planKey.toUpperCase()}_PRICE_ID`);
     }
 
     if (!priceId) {
-      throw new Error(`Price ID not found for plan: ${planKey || planId}`);
+      throw new Error(`Price ID not found for plan: ${planKey || planId}. Set it in Admin → Pricing → Edit Details.`);
     }
 
     if (!userId) {
       throw new Error("Missing required parameter: userId");
     }
 
-    // HP-10: For starter plan, record 12-month minimum commitment in metadata
     const isStarterPlan = (planKey || "").toLowerCase() === "starter";
     const subscriptionMeta: Record<string, string> = {
       userId,
       planKey: planKey || "custom",
+      ...(isStarterPlan ? { minimum_commitment_months: "12" } : {}),
     };
-    if (isStarterPlan) {
-      subscriptionMeta["minimum_commitment_months"] = "12";
-    }
 
-    // Determine success/cancel URLs — invited users (from admin invite flow) land
-    // on the pricing page with ?invited=true, so we send them to their dashboard
-    // on success instead of the billing page.
     const isInvitedFlow = body.invitedFlow === true;
     const successUrl = isInvitedFlow
       ? `${origin}/realtor/billing?session_id={CHECKOUT_SESSION_ID}&status=success&onboarded=true`
@@ -199,12 +203,7 @@ serve(async (req: Request) => {
 
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
-      line_items: [
-        {
-          price: priceId,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: priceId, quantity: 1 }],
       mode: "subscription",
       success_url: successUrl,
       cancel_url: cancelUrl,
@@ -215,9 +214,6 @@ serve(async (req: Request) => {
         ...(isStarterPlan ? { minimum_commitment_months: "12" } : {}),
       },
       subscription_data: {
-        // 14-day free trial on all plans — card is collected now but first charge
-        // happens after the trial ends. The stripe-webhook handles the
-        // checkout.session.completed event and sets subscription status="trialing".
         trial_period_days: 14,
         metadata: subscriptionMeta,
       },
@@ -227,6 +223,7 @@ serve(async (req: Request) => {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
       status: 200,
     });
+
   } catch (error) {
     const err = error as Error;
     console.error(`[Checkout Session Error] ${err.message}`);

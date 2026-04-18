@@ -7,6 +7,8 @@ import Skeleton from '../../../components/ui/Skeleton';
 import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { supabase } from '../../../lib/supabase';
+import { usePlanAccess } from '../../../hooks/usePlanAccess';
+import UpgradeWall from '../../../components/shared/UpgradeWall';
 import { ActionPill } from '../../../components/shared/TableActions';
 import MobileCard, { MobileCardRow, MobileCardActions } from '../../../components/shared/MobileCard';
 import {
@@ -29,9 +31,11 @@ const STATUS_STYLES = {
   rejected: { bg: '#FEE2E2', text: '#991B1B' },
 };
 
+
 export default function RealtorCommissionsPage() {
   const { user, profile } = useAuth();
   const { addToast } = useToast();
+  const { canAccess } = usePlanAccess();
   const [commissions, setCommissions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [activeComm, setActiveComm] = useState(null);
@@ -156,6 +160,25 @@ export default function RealtorCommissionsPage() {
     { label: 'YTD',        value: `$${ytd.toLocaleString()}`,       color: '#1F4D3A', icon: <HiArrowTrendingUp className="w-3.5 h-3.5" /> },
     { label: 'Upcoming',   value: `$${upcoming.toLocaleString()}`,  color: '#7C3AED', icon: <HiCurrencyDollar className="w-3.5 h-3.5" /> },
   ];
+
+  if (!canAccess('commission.tracking')) {
+    return (
+      <AppLayout role={profile?.role || 'realtor'} title="Commissions"
+        user={{ name: profile?.full_name || 'User', role: profile?.role || 'realtor', initials: (profile?.full_name || 'U').slice(0, 2).toUpperCase() }}>
+        <UpgradeWall
+          title="Commission Tracking"
+          description="View your lifetime earnings, track payout history, and dispute commissions."
+          requiredPlan="Pro Agent"
+          bullets={[
+            'Lifetime earnings dashboard',
+            'Payout & invoice history',
+            'Commission dispute system',
+            'Priority support',
+          ]}
+        />
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout role="realtor" title="Commissions">

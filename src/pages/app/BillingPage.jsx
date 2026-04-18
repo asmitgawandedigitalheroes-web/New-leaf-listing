@@ -35,13 +35,12 @@ function formatCurrency(amount) {
 }
 
 export default function BillingPage() {
-  const { user, profile, subscription } = useAuth();
+  const { user, profile } = useAuth();
   const { addToast } = useToast();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
 
   // Directors have their own billing page — redirect them if they land here
-  // (e.g. after a Stripe checkout that used the realtor success URL)
   useEffect(() => {
     if (profile?.role === 'director') {
       const qs = searchParams.toString();
@@ -49,25 +48,68 @@ export default function BillingPage() {
     }
   }, [profile?.role]);
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [payments, setPayments] = useState([]);
-  const [usageStats, setUsageStats] = useState({ listings: 0, leads: 0 });
+  const [isLoading, setIsLoading]     = useState(true);
+  const [payments, setPayments]       = useState([]);
+  const [usageStats, setUsageStats]   = useState({ listings: 0, leads: 0 });
   const [upgradeOpen, setUpgradeOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState('pro');
-  const [upgrading, setUpgrading] = useState(false);
+  const [upgrading, setUpgrading]     = useState(false);
   const [planCatalog, setPlanCatalog] = useState(planCatalog_FALLBACK);
-  const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
+  const [cancelOpen, setCancelOpen]   = useState(false);
+  const [cancelling, setCancelling]   = useState(false);
 
-  // Detect Stripe redirect success/cancel
+  // Fetch subscription directly from DB — never rely on AuthContext cache
+  // which is only loaded at login and won't reflect post-Stripe updates.
+  const [liveSubscription, setLiveSubscription] = useState(null);
+  const [pollingPlan, setPollingPlan] = useState(false);
+
+  const fetchSubscription = useCallback(async () => {
+    if (!user) return null;
+    const { data } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', user.id)
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (data) setLiveSubscription(data);
+    return data;
+  }, [user]);
+
+  // On Stripe success redirect: poll DB until the plan changes (webhook delay)
   useEffect(() => {
     const status = searchParams.get('status');
     if (status === 'success') {
-      addToast({ type: 'success', title: 'Subscription activated!', desc: 'Your plan has been updated.' });
+      addToast({ type: 'success', title: 'Payment received!', desc: 'Activating your plan…' });
+      setPollingPlan(true);
+      let attempts = 0;
+      let initialPlan = null;
+      const poll = setInterval(async () => {
+        attempts++;
+        const sub = await fetchSubscription();
+        if (attempts === 1) initialPlan = sub?.plan ?? null;
+        const planChanged = sub?.plan && sub.plan !== initialPlan;
+        if (planChanged) {
+          addToast({ type: 'success', title: 'Plan activated!', desc: `You are now on the ${sub.plan} plan.` });
+          setPollingPlan(false);
+          clearInterval(poll);
+        } else if (attempts >= 10) {
+          setPollingPlan(false);
+          clearInterval(poll);
+        }
+      }, 2000);
+      return () => clearInterval(poll);
     } else if (status === 'cancelled') {
       addToast({ type: 'warning', title: 'Checkout cancelled', desc: 'No changes were made.' });
     }
   }, []);
+
+  // Also refresh subscription whenever the tab regains focus (e.g. returning from Stripe)
+  useEffect(() => {
+    const onFocus = () => fetchSubscription();
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchSubscription]);
 
   const loadData = useCallback(async () => {
     if (!user) return;
@@ -76,7 +118,7 @@ export default function BillingPage() {
       const [paymentsRes, listingsRes, leadsRes, plansRes] = await Promise.all([
         supabase
           .from('payments')
-          .select('id, amount, status, created_at, stripe_payment_id, description')
+          .select('id, amount, status, created_at, stripe_payment_id, description, invoice_pdf_url')
           .eq('user_id', user.id)
           .order('created_at', { ascending: false })
           .limit(12),
@@ -94,15 +136,15 @@ export default function BillingPage() {
           .select('slug, name, monthly_price, features')
           .eq('is_active', true)
           .order('sort_order', { ascending: true }),
+        fetchSubscription(),
       ]);
 
       setPayments(paymentsRes.data || []);
       setUsageStats({
         listings: listingsRes.count ?? 0,
-        leads: leadsRes.count ?? 0,
+        leads:    leadsRes.count ?? 0,
       });
 
-      // Map DB pricing_plans to the shape the component needs
       if (plansRes.data && plansRes.data.length > 0) {
         const MAX_LISTINGS = { starter: 5, pro: -1, dominator: -1, sponsor: -1 };
         const MAX_LEADS    = { starter: 50, pro: 200, dominator: -1, sponsor: -1 };
@@ -120,16 +162,17 @@ export default function BillingPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [user]);
+  }, [user, fetchSubscription]);
 
   useEffect(() => {
     loadData();
   }, [loadData]);
 
-  // Current plan from AuthContext subscription
+  // Use live DB subscription (always fresh) instead of stale AuthContext cache
+  const subscription    = liveSubscription;
   const currentPlanSlug = subscription?.plan ?? 'starter';
-  const currentPlan = planCatalog.find(p => p.slug === currentPlanSlug) ?? planCatalog[0];
-  const isActive = subscription?.status === 'active' || subscription?.status === 'trialing';
+  const currentPlan     = planCatalog.find(p => p.slug === currentPlanSlug) ?? planCatalog[0];
+  const isActive        = subscription?.status === 'active' || subscription?.status === 'trialing';
 
   const nextBillingDate = subscription?.current_period_end
     ? formatDate(subscription.current_period_end)
@@ -151,36 +194,39 @@ export default function BillingPage() {
     }
     setUpgrading(true);
     try {
-      // BUG-010: Explicitly forward the session JWT to prevent 401 from the Edge Function
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
-      if (!accessToken) {
-        throw new Error('Your session has expired. Please sign in again.');
-      }
-
+      // supabase.functions.invoke automatically attaches the current session JWT.
+      // Do NOT manually override the Authorization header — it causes the Supabase
+      // gateway to reject the request with 401.
       const { data, error } = await supabase.functions.invoke('create-checkout-session', {
         body: {
           planKey: selectedPlan,
           userId: user.id,
           userEmail: user.email,
         },
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
       });
 
-      if (error || !data?.url) {
-        throw new Error(error?.message || 'Failed to create checkout session');
+      // Log full error details to console for debugging
+      if (error) {
+        console.error('[BillingPage] Edge function error object:', error);
+        console.error('[BillingPage] Edge function error context:', error?.context);
+        // Try to extract the actual error message from the response body
+        let edgeMsg = error?.message || 'Unknown error';
+        try {
+          const body = await error?.context?.json?.();
+          if (body?.error) edgeMsg = body.error;
+        } catch (_) {}
+        throw new Error(edgeMsg);
+      }
+
+      if (!data?.url) {
+        throw new Error('No checkout URL returned from payment service');
       }
 
       // Redirect to Stripe Checkout
       window.location.href = data.url;
     } catch (err) {
       console.error('[BillingPage] Upgrade error:', err);
-      const friendlyMsg = err.message?.includes('non-2xx') || err.message?.includes('Edge Function')
-        ? 'Payment service is temporarily unavailable. Please try again later or contact support.'
-        : (err.message || 'Something went wrong. Please try again.');
-      addToast({ type: 'error', title: 'Upgrade failed', desc: friendlyMsg });
+      addToast({ type: 'error', title: 'Upgrade failed', desc: err.message || 'Something went wrong. Please try again.' });
     } finally {
       setUpgrading(false);
       setUpgradeOpen(false);
@@ -241,6 +287,9 @@ export default function BillingPage() {
                     <Badge status={subscription.status === 'trialing' ? 'pending' : subscription.status} label={subscription.status === 'trialing' ? 'Trial' : 'Active'} />
                   ) : (
                     <Badge status="pending" label="No Plan" />
+                  )}
+                  {pollingPlan && (
+                    <span className="text-xs text-gray-400 animate-pulse">Activating plan…</span>
                   )}
                 </div>
                 <p className="text-sm mb-1" style={{ color: '#4B5563' }}>{currentPlan.description}</p>
@@ -326,8 +375,9 @@ export default function BillingPage() {
                   ))
                 ) : payments.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-8 text-gray-400">
-                      No payment history yet.
+                    <td colSpan={5} className="text-center py-8" style={{ color: '#9CA3AF' }}>
+                      <p className="font-medium mb-1">No payment history yet.</p>
+                      <p className="text-xs">Invoices appear here after your trial ends and the first charge succeeds.</p>
                     </td>
                   </tr>
                 ) : payments.map(inv => (
@@ -348,13 +398,27 @@ export default function BillingPage() {
                       />
                     </td>
                     <td>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => addToast({ type: 'success', title: 'Invoice download', desc: 'PDF download coming soon.' })}
-                      >
-                        ↓ PDF
-                      </Button>
+                      {inv.invoice_pdf_url ? (
+                        <a
+                          href={inv.invoice_pdf_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold no-underline transition-all"
+                          style={{ background: '#F3F4F6', color: '#374151' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#E5E7EB'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#F3F4F6'}
+                        >
+                          ↓ PDF
+                        </a>
+                      ) : (
+                        <button
+                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all"
+                          style={{ background: '#F3F4F6', color: '#9CA3AF', cursor: 'default' }}
+                          title="PDF available after invoice is generated by Stripe"
+                        >
+                          — PDF
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

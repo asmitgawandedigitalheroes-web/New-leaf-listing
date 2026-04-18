@@ -33,7 +33,7 @@ export default function FeaturedListings() {
         <div className="grid grid-cols-1 md:grid-cols-[1.35fr_1fr] gap-5">
 
           {/* Primary card */}
-          <div className="group cursor-pointer relative overflow-hidden rounded-sm"
+          <Link to="/browse" className="no-underline group cursor-pointer relative overflow-hidden rounded-sm block"
             style={{ aspectRatio: '3/2', background: '#000' }}>
             <img
               src="https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?w=900&q=90"
@@ -61,7 +61,7 @@ export default function FeaturedListings() {
                 <span className="flex items-center gap-1"><HiArrowsPointingOut size={13} color="rgba(255,255,255,.52)" />6,200 ft²</span>
               </div>
             </div>
-          </div>
+          </Link>
 
           {/* Stacked secondary cards */}
           <div className="flex flex-col gap-5">
@@ -69,7 +69,7 @@ export default function FeaturedListings() {
               { title: 'Villa Marbella', price: '$5,500,000', city: 'Marbella, Spain', badge: 'New Listing', badgeC: S, img: 'https://images.unsplash.com/photo-1613977257363-707ba9348227?w=700&q=85', beds: 6, baths: 5, sqft: '7,800' },
               { title: 'Alpine Quest Estate', price: '$3,200,000', city: 'Aspen, CO', badge: 'Sold', badgeC: GR, img: 'https://images.unsplash.com/photo-1449158743715-0a90ebb6d2d8?w=700&q=85', beds: 4, baths: 4, sqft: '4,100' },
             ].map(p => (
-              <div key={p.title} className="group cursor-pointer relative overflow-hidden rounded-sm flex-1"
+              <Link key={p.title} to="/browse" className="no-underline group cursor-pointer relative overflow-hidden rounded-sm flex-1 block"
                 style={{ background: '#000', minHeight: 180 }}>
                 <img src={p.img} alt={p.title}
                   className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 absolute inset-0"
@@ -87,7 +87,7 @@ export default function FeaturedListings() {
                     <p className="font-headline font-black text-base flex-shrink-0 ml-3" style={{ color: P_LT }}>{p.price}</p>
                   </div>
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         </div>

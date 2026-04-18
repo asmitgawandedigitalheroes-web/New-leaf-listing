@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, ZoomControl } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, ZoomControl, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Link } from 'react-router-dom';
 import {
@@ -19,6 +19,15 @@ const DEEP  = '#1F4D3A';
 const GRAY  = '#4B5563';
 const LGRAY = '#6B7280';
 const BORDER = '#E5E7EB';
+
+// ── Fly-to controller — pans & zooms map when coords change ──────────────────
+function FlyTo({ coords }) {
+  const map = useMap();
+  useEffect(() => {
+    if (coords) map.flyTo(coords, 14, { duration: 1.0 });
+  }, [coords, map]);
+  return null;
+}
 
 // ── Custom map pin icons ──────────────────────────────────────────────────────
 
@@ -127,8 +136,9 @@ export default function MapPage() {
   const [loading,   setLoading]   = useState(true);
   const [filter,    setFilter]    = useState('all'); // 'all' | 'top' | 'featured'
   const [search,    setSearch]    = useState('');
-  const [active,    setActive]    = useState(null);  // active listing id
-  const [sideOpen,  setSideOpen]  = useState(true);
+  const [active,     setActive]     = useState(null);  // active listing id
+  const [flyTarget,  setFlyTarget]  = useState(null);  // [lat, lng] to fly to
+  const [sideOpen,   setSideOpen]   = useState(true);
 
   useEffect(() => {
     async function fetchMapListings() {
@@ -137,11 +147,29 @@ export default function MapPage() {
         .select('id, title, price, city, state, address, images, upgrade_type, latitude, longitude')
         .eq('status', 'active')
         .in('upgrade_type', ['top', 'featured'])
-        .not('latitude',  'is', null)
-        .not('longitude', 'is', null)
         .order('upgrade_type', { ascending: true }); // 'top' comes last → renders on top
 
-      if (!error && data) setListings(data);
+      if (error || !data) { setLoading(false); return; }
+
+      // Geocode any listings that have no stored lat/lng
+      const geocoded = await Promise.all(
+        data.map(async (listing) => {
+          if (listing.latitude != null && listing.longitude != null) return listing;
+          const q = [listing.address, listing.city, listing.state].filter(Boolean).join(', ');
+          if (!q) return null;
+          try {
+            const res = await fetch(
+              `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
+              { headers: { 'Accept-Language': 'en' } }
+            );
+            const geo = await res.json();
+            if (geo[0]) return { ...listing, latitude: parseFloat(geo[0].lat), longitude: parseFloat(geo[0].lon) };
+          } catch (_) {}
+          return null;
+        })
+      );
+
+      setListings(geocoded.filter(Boolean));
       setLoading(false);
     }
     fetchMapListings();
@@ -238,6 +266,7 @@ export default function MapPage() {
                 url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
               />
               <ZoomControl position="bottomright" />
+              <FlyTo coords={flyTarget} />
 
               {filtered.map(listing => (
                 <Marker
@@ -403,7 +432,10 @@ export default function MapPage() {
                     key={listing.id}
                     listing={listing}
                     active={active === listing.id}
-                    onClick={() => setActive(active === listing.id ? null : listing.id)}
+                    onClick={() => {
+                      setActive(listing.id);
+                      setFlyTarget([listing.latitude, listing.longitude]);
+                    }}
                   />
                 ))
               )}

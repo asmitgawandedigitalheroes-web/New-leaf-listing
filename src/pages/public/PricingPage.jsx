@@ -34,7 +34,7 @@ function CardSkeleton() {
 }
 
 function PlanCard({ plan }) {
-  const { user } = useAuth();
+  const { user, profile, isLoading } = useAuth();
   const navigate = useNavigate();
 
   function handleCta(e) {
@@ -43,7 +43,14 @@ function PlanCard({ plan }) {
       window.location.href = 'mailto:support@nlvlistings.com';
       return;
     }
-    navigate(!user ? '/signup' : '/app');
+    if (!user || isLoading) {
+      navigate('/signup');
+      return;
+    }
+    const role = profile?.role;
+    if (role === 'admin')         navigate('/admin/pricing');
+    else if (role === 'director') navigate('/director/billing');
+    else                          navigate('/realtor/billing');
   }
 
   const isDark     = plan.dark;
@@ -52,7 +59,7 @@ function PlanCard({ plan }) {
 
   return (
     <div
-      className="rounded-2xl flex flex-col overflow-hidden relative"
+      className="rounded-2xl flex flex-col overflow-hidden relative h-full"
       style={{
         border:     isPopular ? `2px solid ${GOLD}` : isDark ? 'none' : `1px solid ${BORDER}`,
         background: isDark ? DEEP : '#fff',
@@ -212,7 +219,7 @@ export default function PricingPage() {
 
       {/* ── Plans ── */}
       <section className="pb-20 px-4 md:px-8" style={{ background: '#F7F8FA' }}>
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start pt-6">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch pt-10">
           {loading
             ? [1,2,3,4].map(i => <CardSkeleton key={i} />)
             : plans.map(plan => <PlanCard key={plan.id} plan={plan} />)

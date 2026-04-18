@@ -124,6 +124,7 @@ CREATE TRIGGER trg_enforce_signup_role
 -- =============================================================================
 
 DROP POLICY IF EXISTS "leads_insert_public" ON leads;
+DROP POLICY IF EXISTS "leads_insert_public_restricted" ON leads;
 
 -- Public web-form submissions: allowed, but routing fields must be NULL.
 -- territory_id may be passed (resolved from city/state on the form) but
@@ -175,6 +176,7 @@ CREATE TABLE IF NOT EXISTS stripe_processed_events (
 -- Only the service role (Edge Functions) may read/write this table.
 ALTER TABLE stripe_processed_events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "stripe_events_service_only" ON stripe_processed_events;
 CREATE POLICY "stripe_events_service_only"
   ON stripe_processed_events
   USING (false)        -- no row-level reads for any JWT user

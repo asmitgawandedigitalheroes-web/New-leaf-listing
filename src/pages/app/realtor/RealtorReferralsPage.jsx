@@ -6,9 +6,10 @@ import { useAuth } from '../../../context/AuthContext';
 import { useToast } from '../../../context/ToastContext';
 import { supabase } from '../../../lib/supabase';
 import { useDocumentTitle } from '../../../hooks/useDocumentTitle';
+import { usePlanAccess } from '../../../hooks/usePlanAccess';
+import UpgradeWall from '../../../components/shared/UpgradeWall';
 import {
   HiSparkles,
-  HiLockClosed,
   HiCurrencyDollar,
   HiBuildingOffice,
   HiUser,
@@ -25,8 +26,6 @@ const OSV   = '#4B5563';
 const LGRAY = '#6B7280';
 const BORDER = '#E5E7EB';
 
-// Plans that have Pro Agent+ access to the referral system
-const PRO_PLANS = ['pro', 'dominator', 'sponsor'];
 
 const defaultForm = {
   project_name: '',
@@ -77,8 +76,9 @@ function StatusBadge({ status }) {
 
 export default function RealtorReferralsPage() {
   useDocumentTitle('NLV Referrals');
-  const { profile, subscription } = useAuth();
+  const { profile } = useAuth();
   const { addToast } = useToast();
+  const { canAccess } = usePlanAccess();
 
   const [form, setForm]           = useState(defaultForm);
   const [formErrors, setFormErrors] = useState(defaultErrors);
@@ -88,8 +88,7 @@ export default function RealtorReferralsPage() {
   const [referrals, setReferrals] = useState([]);
   const [loading, setLoading]     = useState(true);
 
-  const plan = subscription?.plan ?? null;
-  const hasAccess = PRO_PLANS.includes(plan);
+  const hasAccess = canAccess('referrals.access');
 
   // Fetch existing referral commissions for this user
   useEffect(() => {
@@ -129,22 +128,12 @@ export default function RealtorReferralsPage() {
     setSubmitting(true);
     const commissionAmount = +(projectValue * 0.005).toFixed(2); // 0.5%
 
-    const { data, error } = await supabase
-      .from('commissions')
-      .insert({
-        recipient_user_id: profile.id,
-        type: 'referral',
-        amount: commissionAmount,
-        status: 'pending',
-        metadata: {
-          project_name: form.project_name.trim(),
-          project_value: projectValue,
-          project_description: form.project_description.trim(),
-          client_name: form.client_name.trim(),
-        },
-      })
-      .select()
-      .single();
+    const { data: newId, error } = await supabase.rpc('submit_referral', {
+      p_project_name:        form.project_name.trim(),
+      p_project_value:       projectValue,
+      p_client_name:         form.client_name.trim(),
+      p_project_description: form.project_description.trim(),
+    });
 
     setSubmitting(false);
     if (error) {
@@ -156,7 +145,19 @@ export default function RealtorReferralsPage() {
         title: 'Referral submitted!',
         desc: `Commission of $${commissionAmount.toFixed(2)} (0.5%) is now pending review.`,
       });
-      setReferrals(prev => [data, ...prev]);
+      // Append optimistic row so user sees it immediately
+      setReferrals(prev => [{
+        id: newId,
+        type: 'referral',
+        amount: commissionAmount,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        metadata: {
+          project_name: form.project_name.trim(),
+          project_value: projectValue,
+          client_name: form.client_name.trim(),
+        },
+      }, ...prev]);
       setForm(defaultForm);
       setFormErrors(defaultErrors);
       setTouched({});
@@ -168,43 +169,20 @@ export default function RealtorReferralsPage() {
   const inputClass = 'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-yellow-400 bg-white';
   const labelClass = 'block text-xs font-semibold uppercase tracking-widest mb-1.5 text-gray-500';
 
-  // Upgrade prompt for starter / null plan users
   if (!hasAccess) {
     return (
       <AppLayout role="realtor" title="NLV Referrals">
-        <div className="p-6 flex flex-col items-center justify-center min-h-[60vh] text-center gap-6">
-          <div
-            className="w-20 h-20 rounded-2xl flex items-center justify-center"
-            style={{ background: `${P}14` }}
-          >
-            <HiLockClosed size={36} color={P} />
-          </div>
-          <div>
-            <h2 className="text-2xl font-black mb-2" style={{ color: OS }}>Pro Agent+ Feature</h2>
-            <p className="text-sm max-w-sm" style={{ color: OSV }}>
-              The NLV Referral System is available to <strong>Pro, Dominator, and Sponsor</strong> plan members.
-              Submit NLV product referrals and earn 0.5% commission on every deal you close.
-            </p>
-          </div>
-          <div
-            className="rounded-2xl p-6 max-w-xs text-left"
-            style={{ background: `${S}08`, border: `1px solid ${S}20` }}
-          >
-            <p className="text-sm font-bold mb-3" style={{ color: S }}>Unlock with Pro Agent+</p>
-            <ul className="flex flex-col gap-2">
-              {['Submit NLV product referrals', 'Earn 0.5% on project value', 'Track all your commissions', 'Priority support'].map(f => (
-                <li key={f} className="flex items-center gap-2 text-sm" style={{ color: OSV }}>
-                  <HiCheckBadge size={16} color={P} /> {f}
-                </li>
-              ))}
-            </ul>
-          </div>
-          <Link to="/realtor/billing">
-            <Button size="lg">
-              <HiArrowUpRight size={16} /> Upgrade Plan
-            </Button>
-          </Link>
-        </div>
+        <UpgradeWall
+          title="NLV Referral Program"
+          description="Submit NLV product referrals and earn 0.5% commission on every deal you close."
+          requiredPlan="Pro Agent"
+          bullets={[
+            'Submit NLV product referrals',
+            'Earn 0.5% commission on project value',
+            'Track referral status in real time',
+            'Priority realtor support',
+          ]}
+        />
       </AppLayout>
     );
   }

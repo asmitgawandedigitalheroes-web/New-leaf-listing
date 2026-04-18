@@ -71,14 +71,16 @@ import RealtorCommissionsPage from './pages/app/realtor/RealtorCommissionsPage';
 import RealtorProfilePage     from './pages/app/realtor/RealtorProfilePage';
 import RealtorMessagesPage    from './pages/app/realtor/RealtorMessagesPage';
 import RealtorReferralsPage   from './pages/app/realtor/RealtorReferralsPage';
+import RealtorAnalyticsPage   from './pages/app/realtor/RealtorAnalyticsPage';
 
 // ── Onboarding pages ─────────────────────────────────────────────
 import PendingApprovalPage from './pages/onboarding/PendingApprovalPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // ── Listing detail + edit ─────────────────────────────────────────
-import ListingDetail   from './pages/app/ListingDetail';
-import ListingEditPage from './pages/app/ListingEditPage';
+import ListingDetail         from './pages/app/ListingDetail';
+import PublicListingDetail   from './pages/public/PublicListingDetail';
+import ListingEditPage       from './pages/app/ListingEditPage';
 
 export default function App() {
   return (
@@ -93,7 +95,7 @@ export default function App() {
             <Route path="/"                element={<HomePage />} />
             <Route path="/browse"          element={<BrowseListings />} />
             <Route path="/map"             element={<MapPage />} />
-            <Route path="/listing/:id"     element={<ListingDetail />} />
+            <Route path="/listing/:id"     element={<PublicListingDetail />} />
             <Route path="/pricing"         element={<PricingPage />} />
             <Route path="/about"   element={<AboutPage />} />
             <Route path="/contact" element={<ContactPage />} />
@@ -303,6 +305,11 @@ export default function App() {
             <Route path="/realtor/referrals" element={
               <ProtectedRoute allowedRoles={['director', 'realtor']}>
                 <RealtorReferralsPage />
+              </ProtectedRoute>
+            } />
+            <Route path="/realtor/analytics" element={
+              <ProtectedRoute allowedRoles={['director', 'realtor']}>
+                <RealtorAnalyticsPage />
               </ProtectedRoute>
             } />
 

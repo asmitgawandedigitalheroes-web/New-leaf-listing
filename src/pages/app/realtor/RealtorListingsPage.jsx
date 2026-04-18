@@ -1,5 +1,5 @@
-import { useState, useMemo, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import AppLayout from '../../../components/layout/AppLayout';
 import Button from '../../../components/ui/Button';
 import Badge from '../../../components/ui/Badge';
@@ -10,6 +10,7 @@ import { useToast } from '../../../context/ToastContext';
 import { supabase } from '../../../lib/supabase';
 import { HiPhoto, HiHome, HiExclamationCircle, HiArrowUpTray, HiXMark, HiEye, HiMapPin, HiPencilSquare, HiArrowUpCircle } from 'react-icons/hi2';
 import { ActionPill, ActionMenu } from '../../../components/shared/TableActions';
+import { usePlanAccess } from '../../../hooks/usePlanAccess';
 
 // Upgrade tier display config — prices come from listing_prices table
 const TIER_META = {
@@ -36,6 +37,8 @@ export default function RealtorListingsPage() {
   const { profile, subscription } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { planLimits } = usePlanAccess();
 
   const [activeTab, setActiveTab]   = useState('all');
   const [createOpen, setCreateOpen] = useState(false);
@@ -45,9 +48,6 @@ export default function RealtorListingsPage() {
   const [step, setStep]             = useState(0);
   const [form, setForm]             = useState(defaultForm);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editOpen, setEditOpen]     = useState(false);
-  const [editTarget, setEditTarget] = useState(null);
-  const [editForm, setEditForm]     = useState(defaultForm);
   const [listingPrices, setListingPrices] = useState([]);
   const [selectedTier, setSelectedTier]   = useState('featured');
   const [rejectReason, setRejectReason]   = useState('');
@@ -60,9 +60,44 @@ export default function RealtorListingsPage() {
   const [formFieldErrors, setFormFieldErrors] = useState({});
   const [openMenuId, setOpenMenuId]       = useState(null);
 
-  const { listings: allListings, createListing, updateListing, deleteListing, submitForApproval, isLoading } = useListings({
+  const { listings: allListings, createListing, updateListing, deleteListing, submitForApproval, isLoading, refresh } = useListings({
     // Fetch all listings for this realtor to calculate global counts accurately
   });
+
+  // After Stripe redirect: poll until upgrade_type is reflected in DB (webhook delay)
+  const upgradeHandled = useRef(false);
+  useEffect(() => {
+    const upgradeStatus = searchParams.get('upgrade');
+    const targetListingId = searchParams.get('listing');
+    const targetTier = searchParams.get('tier');
+    if (upgradeStatus !== 'success' || !targetListingId || upgradeHandled.current) return;
+    upgradeHandled.current = true;
+
+    navigate('/realtor/listings', { replace: true });
+    addToast({ type: 'info', title: 'Processing payment…', desc: 'Your listing upgrade is being activated.' });
+
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      const { data } = await supabase
+        .from('listings')
+        .select('upgrade_type')
+        .eq('id', targetListingId)
+        .maybeSingle();
+
+      if (data?.upgrade_type === targetTier) {
+        clearInterval(poll);
+        refresh();
+        addToast({ type: 'success', title: 'Listing upgraded!', desc: `Your listing is now ${targetTier}.` });
+      } else if (attempts >= 12) {
+        clearInterval(poll);
+        refresh();
+        addToast({ type: 'warning', title: 'Almost there', desc: 'Upgrade is still processing — refresh in a moment.' });
+      }
+    }, 3000);
+
+    return () => clearInterval(poll);
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fetch listing upgrade prices from DB
   useEffect(() => {
@@ -75,21 +110,16 @@ export default function RealtorListingsPage() {
       });
   }, []);
 
-  // Deep-linking: Handle ?edit={id} from dashboard
+  // Deep-linking: Handle ?edit={id} from dashboard — navigate to full edit page
   useEffect(() => {
     if (isLoading || !allListings.length) return;
     const params = new URLSearchParams(window.location.search);
     const editId = params.get('edit');
     if (editId) {
-      const listing = allListings.find(l => l.id === editId);
-      if (listing) {
-        openEdit(listing);
-        // Clean up URL to prevent re-opening on manual refresh
-        const newUrl = window.location.pathname + window.location.hash;
-        window.history.replaceState({}, '', newUrl);
-      }
+      window.history.replaceState({}, '', window.location.pathname);
+      navigate(`/listings/${editId}/edit`);
     }
-  }, [isLoading, allListings]);
+  }, [isLoading, allListings]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tabCounts = useMemo(() => {
     return {
@@ -110,81 +140,8 @@ export default function RealtorListingsPage() {
     return list;
   }, [allListings, activeTab, filterType, filterListingType, filterSearch]);
 
-  // ── Edit handlers ────────────────────────────────────────────────────────────
-
-  const openEdit = (listing) => {
-    setEditTarget(listing);
-    setEditForm({
-      title:         listing.title || '',
-      description:   listing.description || '',
-      price:         listing.price || '',
-      property_type: listing.property_type || 'House',
-      country:       listing.country || 'USA',
-      state:         listing.state || '',
-      city:          listing.city || '',
-      address:       listing.address || '',
-      zip_code:      listing.zip_code || '',
-      bedrooms:      listing.bedrooms || '',
-      bathrooms:     listing.bathrooms || '',
-      sqft:          listing.sqft || '',
-      images:        listing.images || [],
-    });
-    setEditOpen(true);
-  };
-
-  const handleEditSave = async () => {
-    if (!editForm.title || editForm.title.length < 10) {
-      addToast({ type: 'error', title: 'Invalid title', desc: 'Title must be at least 10 characters long.' });
-      return;
-    }
-    if (!editForm.description?.trim()) {
-      addToast({ type: 'error', title: 'Missing description', desc: 'Please add a description for this listing.' });
-      return;
-    }
-    if (Number(editForm.price) < 1000) {
-      addToast({ type: 'error', title: 'Invalid price', desc: 'Listing price must be at least $1,000.' });
-      return;
-    }
-    if (!editForm.bedrooms || Number(editForm.bedrooms) < 1) {
-      addToast({ type: 'error', title: 'Missing bedrooms', desc: 'Please specify the number of bedrooms.' });
-      return;
-    }
-    if (!editForm.bathrooms || Number(editForm.bathrooms) < 1) {
-      addToast({ type: 'error', title: 'Missing bathrooms', desc: 'Please specify the number of bathrooms.' });
-      return;
-    }
-    if (!editForm.sqft || Number(editForm.sqft) < 1) {
-      addToast({ type: 'error', title: 'Missing sqft', desc: 'Please specify the square footage.' });
-      return;
-    }
-    if (!editForm.state?.trim()) {
-      addToast({ type: 'error', title: 'Missing state', desc: 'Please specify the state.' });
-      return;
-    }
-    if (!editForm.city?.trim()) {
-      addToast({ type: 'error', title: 'Missing city', desc: 'Please specify the city for this listing.' });
-      return;
-    }
-    if (!editForm.address?.trim()) {
-      addToast({ type: 'error', title: 'Missing address', desc: 'Please specify the street address.' });
-      return;
-    }
-
-    const { error } = await updateListing(editTarget.id, {
-      ...editForm,
-      price:     Number(editForm.price),
-      bedrooms:  Number(editForm.bedrooms),
-      bathrooms: Number(editForm.bathrooms),
-      sqft:      Number(editForm.sqft),
-      images:    editForm.images || [],
-    });
-    if (!error) {
-      addToast({ type: 'success', title: 'Listing updated', desc: 'Your changes have been saved.' });
-      setEditOpen(false);
-    } else {
-      addToast({ type: 'error', title: 'Update failed', desc: error.message });
-    }
-  };
+  // ── Edit: navigate to full edit page ────────────────────────────────────────
+  const openEdit = (listing) => navigate(`/listings/${listing.id}/edit`);
 
   const handleDeleteConfirm = async () => {
     if (!deleteTarget) return;
@@ -593,7 +550,20 @@ export default function RealtorListingsPage() {
             <h2 className="text-xl font-bold text-gray-900">My Listings</h2>
             <p className="text-sm text-gray-400">{allListings.length} total listings</p>
           </div>
-          <Button variant="primary" onClick={() => setCreateOpen(true)}>+ Create Listing</Button>
+          <Button variant="primary" onClick={() => {
+            const activeCount = allListings.filter(l => l.status === 'active').length;
+            const limit = planLimits.listings;
+            if (limit !== -1 && activeCount >= limit) {
+              addToast({
+                type: 'warning',
+                title: `Listing limit reached (${limit}/${limit})`,
+                desc: 'Upgrade your plan to add more listings.',
+              });
+              navigate('/realtor/billing');
+              return;
+            }
+            setCreateOpen(true);
+          }}>+ Create Listing</Button>
         </div>
 
         {/* Status Tabs */}
@@ -686,7 +656,21 @@ export default function RealtorListingsPage() {
                             style={{ width: 44, height: 44, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
                           />
                           <div>
-                            <div className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">{listing.title}</div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <div className="font-semibold text-gray-900 text-sm truncate max-w-[200px]">{listing.title}</div>
+                              {listing.upgrade_type === 'featured' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide flex-shrink-0"
+                                  style={{ background: 'linear-gradient(135deg,#D4AF37,#B8962E)', color: '#fff' }}>
+                                  FEATURED
+                                </span>
+                              )}
+                              {listing.upgrade_type === 'top' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide flex-shrink-0"
+                                  style={{ background: 'linear-gradient(135deg,#7C3AED,#5B21B6)', color: '#fff' }}>
+                                  TOP
+                                </span>
+                              )}
+                            </div>
                             <div className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
                               <HiMapPin size={10} />
                               {[listing.city, listing.state].filter(Boolean).join(', ') || 'No location'}
@@ -854,98 +838,6 @@ export default function RealtorListingsPage() {
         }
       >
         {renderStep()}
-      </Modal>
-
-      {/* Edit Listing Modal */}
-      <Modal
-        open={editOpen}
-        onClose={() => setEditOpen(false)}
-        title="Edit Listing"
-        maxWidth="600px"
-        footer={
-          <div className="flex gap-2 justify-end w-full">
-            <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
-            <Button variant="primary" onClick={handleEditSave} isLoading={isLoading}>Save Changes</Button>
-          </div>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className={labelClass}>Title</label>
-            <input value={editForm.title} onChange={e => setEditForm(f => ({ ...f, title: e.target.value }))} className={inputClass} />
-          </div>
-          <div>
-            <label className={labelClass}>Description</label>
-            <textarea rows={2} value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} className={inputClass + ' resize-none'} />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>Price ($)</label>
-              <input type="number" min="0" step="1" value={editForm.price} onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Property Type</label>
-              <select value={editForm.property_type} onChange={e => setEditForm(f => ({ ...f, property_type: e.target.value }))} className={inputClass}>
-                {['House', 'Condo', 'Townhouse', 'Land', 'Commercial'].map(t => <option key={t}>{t}</option>)}
-              </select>
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-4">
-            <div>
-              <label className={labelClass}>Beds</label>
-              <input type="number" min="0" step="1" value={editForm.bedrooms} onChange={e => setEditForm(f => ({ ...f, bedrooms: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Baths</label>
-              <input type="number" min="0" step="0.5" value={editForm.bathrooms} onChange={e => setEditForm(f => ({ ...f, bathrooms: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Sqft</label>
-              <input type="number" min="0" step="1" value={editForm.sqft} onChange={e => setEditForm(f => ({ ...f, sqft: e.target.value }))} className={inputClass} />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className={labelClass}>City</label>
-              <input value={editForm.city} onChange={e => setEditForm(f => ({ ...f, city: e.target.value }))} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>State</label>
-              <input value={editForm.state} onChange={e => setEditForm(f => ({ ...f, state: e.target.value }))} className={inputClass} />
-            </div>
-          </div>
-          <div>
-            <label className={labelClass}>Address</label>
-            <input value={editForm.address} onChange={e => setEditForm(f => ({ ...f, address: e.target.value }))} className={inputClass} />
-          </div>
-
-          <div className="space-y-3 pt-2">
-            <label className={labelClass}>Property Photos ({editForm.images.length}/5)</label>
-            <div className="grid grid-cols-4 gap-2">
-              {editForm.images.map((url, idx) => (
-                <div key={idx} className="relative aspect-square rounded-lg overflow-hidden group border border-gray-100 shadow-sm">
-                  <img src={url} alt={`Listing ${idx + 1}`} className="w-full h-full object-cover" />
-                  <button 
-                    onClick={() => removeImage(idx, 'edit')}
-                    className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                  >
-                    <HiXMark className="text-white w-5 h-5" />
-                  </button>
-                </div>
-              ))}
-              {editForm.images.length < 5 && (
-                <label className={`aspect-square flex flex-col items-center justify-center rounded-lg border-2 border-dashed transition-all cursor-pointer bg-gray-50 border-gray-200 ${uploading ? 'opacity-50' : 'hover:border-yellow-400 hover:bg-yellow-50/30 group'}`}>
-                  <input type="file" className="hidden" accept="image/*" onChange={(e) => handleFileUpload(e, 'edit')} disabled={uploading} />
-                  {uploading ? (
-                    <div className="w-4 h-4 border-2 border-yellow-500 border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <HiArrowUpTray className="w-4 h-4 text-gray-400 group-hover:text-yellow-600" />
-                  )}
-                </label>
-              )}
-            </div>
-          </div>
-        </div>
       </Modal>
 
       {/* Upgrade Modal */}

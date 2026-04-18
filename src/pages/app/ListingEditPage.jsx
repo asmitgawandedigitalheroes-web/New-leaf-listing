@@ -8,7 +8,21 @@ import { useToast } from '../../context/ToastContext';
 import { useListing } from '../../hooks/useListing';
 import { useListings } from '../../hooks/useListings';
 import { supabase } from '../../lib/supabase';
-import { HiArrowUpTray, HiXMark, HiPhoto, HiMapPin } from 'react-icons/hi2';
+import { HiArrowUpTray, HiXMark, HiPhoto, HiMapPin, HiCheckCircle, HiArrowUpCircle } from 'react-icons/hi2';
+
+async function geocodeAddress(address, city, state, country) {
+  const q = [address, city, state, country].filter(Boolean).join(', ');
+  if (!q) return null;
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&limit=1`,
+      { headers: { 'Accept-Language': 'en' } }
+    );
+    const data = await res.json();
+    if (data[0]) return { lat: parseFloat(data[0].lat), lng: parseFloat(data[0].lon) };
+  } catch (_) {}
+  return null;
+}
 
 const PROPERTY_TYPES = ['House', 'Condo', 'Townhouse', 'Land', 'Multi-Family', 'Commercial'];
 
@@ -48,8 +62,6 @@ export default function ListingEditPage() {
         bathrooms:     listing.bathrooms ?? '',
         sqft:          listing.sqft ?? '',
         images:        listing.images || [],
-        latitude:      listing.latitude ?? '',
-        longitude:     listing.longitude ?? '',
       });
     }
   }, [listing?.id]);
@@ -137,6 +149,10 @@ export default function ListingEditPage() {
     if (!form.address?.trim()) { addToast({ type: 'error', title: 'Address required' }); return; }
 
     setIsSaving(true);
+
+    // Auto-geocode from address fields — no manual input needed
+    const coords = await geocodeAddress(form.address, form.city, form.state, form.country);
+
     const { error } = await updateListing(id, {
       title:         form.title,
       description:   form.description,
@@ -151,8 +167,8 @@ export default function ListingEditPage() {
       bathrooms:     Number(form.bathrooms) || 0,
       sqft:          Number(form.sqft) || 0,
       images:        form.images || [],
-      latitude:      form.latitude  !== '' ? Number(form.latitude)  : null,
-      longitude:     form.longitude !== '' ? Number(form.longitude) : null,
+      latitude:      coords?.lat ?? null,
+      longitude:     coords?.lng ?? null,
     });
     setIsSaving(false);
     if (error) {
@@ -361,47 +377,59 @@ export default function ListingEditPage() {
               </div>
 
               {/* ── Map Pin ── */}
-              <div className="rounded-2xl p-6 mb-2" style={{ border: '1px solid #E5E7EB', background: '#fff' }}>
-                <div className="flex items-center gap-2 mb-1">
-                  <HiMapPin size={16} style={{ color: '#D4AF37' }} />
-                  <h3 className="text-sm font-bold text-gray-800">Map Pin Location</h3>
-                </div>
-                <p className="text-xs text-gray-400 mb-4">
-                  Listings with coordinates appear as pins on the public map.{' '}
-                  Available on <strong>Market Owner</strong> (gold priority pin) and <strong>Dominator</strong> (standard pin) plans only.
-                  Use <a href="https://www.latlong.net" target="_blank" rel="noopener noreferrer" style={{ color: '#D4AF37' }}>latlong.net</a> to find coordinates.
-                </p>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Latitude</label>
-                    <input
-                      type="number"
-                      step="0.000001"
-                      placeholder="e.g. 36.1699"
-                      value={form.latitude}
-                      onChange={e => setForm(p => ({ ...p, latitude: e.target.value }))}
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-yellow-400 transition-colors"
-                    />
+              {(() => {
+                const hasMapPin = listing?.upgrade_type === 'top' || listing?.upgrade_type === 'featured';
+                const isTop     = listing?.upgrade_type === 'top';
+                return (
+                  <div className="rounded-2xl p-6 mb-2" style={{ border: `1px solid ${hasMapPin ? '#D4AF37' : '#E5E7EB'}`, background: '#fff' }}>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <HiMapPin size={16} style={{ color: '#D4AF37' }} />
+                        <h3 className="text-sm font-bold text-gray-800">Map Pin Location</h3>
+                      </div>
+                      {hasMapPin && (
+                        <span className="flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-full"
+                          style={{ background: 'rgba(31,77,58,0.08)', color: '#1F4D3A' }}>
+                          <HiCheckCircle size={13} />
+                          Available
+                        </span>
+                      )}
+                    </div>
+
+                    {hasMapPin ? (
+                      <div className="mt-3 p-3 rounded-xl flex items-start gap-3"
+                        style={{ background: 'rgba(212,175,55,0.06)', border: '1px solid rgba(212,175,55,0.2)' }}>
+                        <HiMapPin size={16} style={{ color: '#D4AF37', flexShrink: 0, marginTop: 1 }} />
+                        <div>
+                          <p className="text-xs font-semibold" style={{ color: '#92400e' }}>
+                            {isTop ? 'Gold Priority Pin' : 'Standard Pin'} — Active
+                          </p>
+                          <p className="text-xs mt-0.5" style={{ color: '#78716c' }}>
+                            Your listing will appear on the public map. Coordinates are auto-detected from your address when you save.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <p className="text-xs text-gray-400 mb-3">
+                          Map pins are available on <strong>Featured</strong> (standard pin) and <strong>Top</strong> (gold priority pin) listing tiers only.
+                          Upgrade your listing to appear on the public map.
+                        </p>
+                        <button
+                          onClick={() => navigate('/realtor/billing')}
+                          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold transition-all"
+                          style={{ background: '#1F4D3A', color: '#fff' }}
+                          onMouseEnter={e => e.currentTarget.style.background = '#163A2B'}
+                          onMouseLeave={e => e.currentTarget.style.background = '#1F4D3A'}
+                        >
+                          <HiArrowUpCircle size={16} />
+                          Upgrade Plan
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">Longitude</label>
-                    <input
-                      type="number"
-                      step="0.000001"
-                      placeholder="e.g. -115.1398"
-                      value={form.longitude}
-                      onChange={e => setForm(p => ({ ...p, longitude: e.target.value }))}
-                      className="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:border-yellow-400 transition-colors"
-                    />
-                  </div>
-                </div>
-                {form.latitude && form.longitude && (
-                  <div className="mt-3 flex items-center gap-2 text-xs font-medium" style={{ color: '#1F4D3A' }}>
-                    <HiMapPin size={13} />
-                    Pin set: {Number(form.latitude).toFixed(5)}, {Number(form.longitude).toFixed(5)}
-                  </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* ── Actions ── */}
               <div className="flex gap-3 pb-8">

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { HiBars3, HiXMark } from 'react-icons/hi2';
 import NLVLogo from '../ui/NLVLogo';
+import { useAuth } from '../../context/AuthContext';
 
 const G = 'var(--color-gold)';
 const GH = 'var(--color-gold-dark)';
@@ -10,6 +11,7 @@ const DG = 'var(--color-primary-dark)';
 const LINKS = [
   { label: 'Home', to: '/' },
   { label: 'Browse', to: '/browse' },
+  { label: 'Map', to: '/map' },
   { label: 'Pricing', to: '/pricing' },
   { label: 'About', to: '/about' },
 ];
@@ -17,6 +19,12 @@ const LINKS = [
 export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const { user, profile } = useAuth();
+
+  const dashboardHref =
+    profile?.role === 'admin'    ? '/admin/dashboard' :
+    profile?.role === 'director' ? '/director/dashboard' :
+                                   '/realtor/dashboard';
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 18);
@@ -73,13 +81,13 @@ export default function Navbar() {
         <div className="hidden md:flex items-center gap-3 ml-auto">
           {/* Secondary — green outline */}
           <Link
-            to="/login"
+            to={user ? dashboardHref : '/login'}
             className="text-sm font-bold no-underline px-5 py-2.5 rounded-xl transition-all"
             style={{ background: 'transparent', color: DG, border: `1.5px solid ${DG}` }}
             onMouseEnter={e => { e.currentTarget.style.background = 'var(--color-surface-container-low)'; }}
             onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
           >
-            Sign In
+            {user ? 'Dashboard' : 'Sign In'}
           </Link>
           {/* Primary — gold */}
           <Link
@@ -131,14 +139,14 @@ export default function Navbar() {
           <div className="flex flex-col gap-3 pt-5 mt-2" style={{ borderTop: `1px solid var(--color-gold-muted)` }}>
             {/* Secondary */}
             <Link
-              to="/login"
+              to={user ? dashboardHref : '/login'}
               className="text-center py-3.5 text-sm font-bold rounded-xl no-underline transition-all"
               style={{ background: 'transparent', color: DG, border: `1.5px solid ${DG}` }}
               onClick={() => setMenuOpen(false)}
               onMouseEnter={e => e.currentTarget.style.background = 'var(--color-surface-container-low)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
             >
-              Sign In
+              {user ? 'Dashboard' : 'Sign In'}
             </Link>
             {/* Primary */}
             <Link

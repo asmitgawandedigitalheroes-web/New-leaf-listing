@@ -18,20 +18,16 @@ export const auditService = {
     entityId: string | null = null,
     metadata: Record<string, any> | null = null
   ) => {
-    return adminApi.request<AuditLog>(
-      supabase
-        .from('audit_logs')
-        .insert({
-          user_id: userId,
-          action,
-          entity_type: entityType,
-          entity_id: entityId,
-          timestamp: new Date().toISOString(),
-          metadata,
-        })
-        .select()
-        .single() as any
-    );
+    // Direct INSERT is blocked by RLS (BUG-028 security fix).
+    // Use the SECURITY DEFINER RPC which validates auth server-side.
+    const { error } = await supabase.rpc('log_audit_event', {
+      p_user_id:     userId,
+      p_action:      action,
+      p_entity_type: entityType,
+      p_entity_id:   entityId,
+      p_metadata:    metadata,
+    });
+    if (error) throw error;
   },
 
   /**

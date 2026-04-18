@@ -48,7 +48,7 @@ export default function Pricing() {
         </div>
 
         {/* Cards grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
           {loading
             ? [1,2,3,4].map(i => <PricingCardSkeleton key={i} />)
             : plans.map(plan => <PricingCard key={plan.id} plan={plan} />)
@@ -86,6 +86,7 @@ function PricingCard({ plan }) {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    height: '100%',
   } : plan.popular ? {
     background: '#fff',
     border: `2px solid ${GOLD}`,
@@ -94,7 +95,7 @@ function PricingCard({ plan }) {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    transform: 'translateY(-10px)',
+    height: '100%',
   } : {
     background: '#fff',
     border: '1px solid #E5E7EB',
@@ -103,6 +104,7 @@ function PricingCard({ plan }) {
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
+    height: '100%',
   };
 
   const isCustom   = plan.monthlyPrice === 0;

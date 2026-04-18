@@ -217,6 +217,17 @@ export default function SignupPage() {
   const [inviteError,   setInviteError]   = useState('');
   const [inviteLoading, setInviteLoading] = useState(!!inviteToken);
 
+  // Referral tracking — resolve ?ref=CODE to referrer's UUID on mount
+  const refCode = searchParams.get('ref') || '';
+  const [referredBy, setReferredBy] = useState(null);
+  useEffect(() => {
+    if (!refCode) return;
+    import('../../lib/supabase').then(({ supabase }) => {
+      supabase.rpc('resolve_referral_code', { p_code: refCode })
+        .then(({ data }) => { if (data) setReferredBy(data); });
+    });
+  }, [refCode]);
+
   // If role is forced by URL or invite token present, skip the role-selection step
   const [step, setStep] = useState((isDirectorInvite || !!inviteToken) ? 1 : 0);
   const [form, setForm] = useState({
@@ -366,6 +377,7 @@ export default function SignupPage() {
       license_state:        form.licenseState  || null,
       license_expiry:       form.licenseExpiry || null,
       invite_token:         inviteToken || null,
+      referred_by:          referredBy  || null,
     });
     setLoading(false);
     if (error) {
