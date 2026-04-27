@@ -2,38 +2,46 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { HiMapPin, HiEnvelope, HiPhone, HiArrowRight } from 'react-icons/hi2';
 import Label from '../shared/Label';
+import { useSiteSettings } from '../../context/SiteSettingsContext';
 
 const GOLD = '#D4AF37';
 const DEEP = '#1F4D3A';
-const OS   = '#111111';
-const OSV  = '#4B5563';
+const OS = '#111111';
+const OSV = '#4B5563';
 const LGRAY = '#6B7280';
 
-const INFO = [
-  {
-    icon: HiMapPin,
-    label: 'Headquarters',
-    lines: ['8 The Green St', 'Dover, DE, 19901'],
-    color: DEEP,
-    bg: '#E8F3EE',
-  },
-  {
-    icon: HiEnvelope,
-    label: 'Email Us',
-    lines: ['hello@nlvlistings.com', 'support@nlvlistings.com'],
-    color: GOLD,
-    bg: 'rgba(212,175,55,0.1)',
-  },
-  {
-    icon: HiPhone,
-    label: 'Call Us',
-    lines: ['1-866-886-3040', 'Mon–Fri, 9am – 6pm PST'],
-    color: DEEP,
-    bg: '#E8F3EE',
-  },
-];
-
 export default function ContactSection() {
+  const { contact, supportEmail } = useSiteSettings();
+
+  const cityStateZip = [
+    [contact.city, contact.state].filter(Boolean).join(', '),
+    contact.zip,
+  ].filter(Boolean).join(' ').trim();
+
+  const INFO = [
+    {
+      icon: HiMapPin,
+      label: 'Headquarters',
+      lines: [contact.address, cityStateZip].filter(Boolean),
+      color: DEEP,
+      bg: '#E8F3EE',
+    },
+    {
+      icon: HiEnvelope,
+      label: 'Email Us',
+      lines: [supportEmail].filter(Boolean),
+      color: GOLD,
+      bg: 'rgba(212,175,55,0.1)',
+    },
+    {
+      icon: HiPhone,
+      label: 'Call Us',
+      lines: [contact.phone, contact.businessHours].filter(Boolean),
+      color: DEEP,
+      bg: '#E8F3EE',
+    },
+  ].filter(i => i.lines.length > 0);
+
   return (
     <section className="py-24 px-4 md:px-8 lg:px-14" style={{ background: '#F7F6F2' }}>
       <div className="max-w-7xl mx-auto">
@@ -54,6 +62,18 @@ export default function ContactSection() {
               Whether you're a realtor ready to grow your business, a developer looking to partner, or just curious about NLV Listings — we'd love to hear from you.
             </p>
 
+            {/* Mascot Image */}
+            <div className="mt-4 flex justify-center lg:justify-start">
+              <img 
+                src="/images/mascot.png" 
+                alt="NLV Mascot" 
+                className="w-full max-w-[380px] h-auto object-contain drop-shadow-2xl transition-transform duration-500 hover:scale-105" 
+              />
+            </div>
+          </div>
+
+          {/* Right — Details & CTA */}
+          <div className="flex flex-col gap-8">
             {/* Contact info cards */}
             <div className="flex flex-col gap-4">
               {INFO.map(item => {
@@ -84,17 +104,16 @@ export default function ContactSection() {
                 );
               })}
             </div>
-          </div>
 
-          {/* Right — CTA card */}
-          <div
-            className="rounded-2xl p-8 md:p-10"
-            style={{
-              background: '#1A202C',
-              boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
-              borderLeft: `3px solid ${GOLD}`,
-            }}
-          >
+            {/* CTA card */}
+            <div
+              className="rounded-2xl p-8 md:p-10"
+              style={{
+                background: '#1A202C',
+                boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+                borderLeft: `3px solid ${GOLD}`,
+              }}
+            >
             <div className="text-[10px] font-black uppercase tracking-widest mb-3" style={{ color: GOLD }}>
               Ready to join?
             </div>
@@ -126,23 +145,9 @@ export default function ContactSection() {
                 Contact Sales
               </Link>
             </div>
-
-            {/* Stats row */}
-            <div className="grid grid-cols-3 gap-4 mt-8 pt-8 border-t" style={{ borderColor: 'rgba(255,255,255,0.08)' }}>
-              {[
-                { val: '2,400+', label: 'Active Listings' },
-                { val: '340+',   label: 'Elite Realtors' },
-                { val: '$1.2B',  label: 'Transactions' },
-              ].map(s => (
-                <div key={s.label} className="text-center">
-                  <div className="font-headline font-black text-lg" style={{ color: GOLD }}>{s.val}</div>
-                  <div className="text-[10px] uppercase tracking-wider mt-0.5" style={{ color: '#6B7280' }}>{s.label}</div>
-                </div>
-              ))}
-            </div>
+          </div>
           </div>
         </div>
-
       </div>
     </section>
   );

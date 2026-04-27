@@ -7,13 +7,15 @@ import { notificationService } from '../../services/notification.service';
 
 /** Fire-and-forget audit log writer — uses SECURITY DEFINER RPC to bypass RLS. */
 async function audit(userId, action, entityId, meta = {}) {
+  // Skip audit for anonymous users — RPC requires authenticated user
+  if (!userId) return;
   await supabase.rpc('log_audit_event', {
     p_user_id:     userId,
     p_action:      action,
     p_entity_type: 'lead',
     p_entity_id:   entityId,
     p_metadata:    meta,
-  });
+  }).catch(err => console.warn('[audit] log_audit_event failed (non-fatal):', err.message));
 }
 
 /**
@@ -315,6 +317,11 @@ export function useLeads() {
       audit(user.id, 'lead.reassigned', id, { new_realtor_id: newRealtorId, lock_until: lockUntil }).catch(() => {});
 
       notificationService.notifyNewLead(id, newRealtorId, null).catch(console.error);
+
+      // Sync updated assignment to GHL so nlv_assigned_to reflects new realtor
+      crmService.syncLead(id).catch(err => {
+        console.error('[useLeads] CRM sync after reassign failed:', err);
+      });
 
       const updated = freshLead || { id, assigned_realtor_id: newRealtorId, status: 'assigned' };
       setLeads(prev => prev.map(l => l.id === id ? { ...l, ...updated } : l));

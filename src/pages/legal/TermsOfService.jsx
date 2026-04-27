@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { HiScale, HiShieldCheck, HiLockClosed, HiDocumentText, HiArrowRight, HiHome, HiUserGroup, HiCurrencyDollar, HiMap, HiBanknotes, HiXCircle, HiExclamationTriangle, HiStar, HiEye, HiPencilSquare, HiGlobeAlt, HiEnvelope } from 'react-icons/hi2';
 import PublicNav from '../../components/layout/PublicNav';
-import Footer from '../../components/shared/Footer';
+import PublicFooter from '../../components/layout/PublicFooter';
 
 const P = '#D4AF37';
 const S = '#1F4D3A';
@@ -256,7 +256,7 @@ export default function TermsOfService() {
         </div>
       </div>
     </div>
-    <Footer />
+    <PublicFooter />
     </>
   );
 }

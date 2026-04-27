@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import PublicNav from '../../components/layout/PublicNav';
-import Footer from '../../components/shared/Footer';
+import PublicFooter from '../../components/layout/PublicFooter';
 import {
   HiClipboardDocumentList,
   HiUserGroup,
@@ -183,7 +183,7 @@ export default function PlatformRules() {
 
       </div>
     </div>
-    <Footer />
+    <PublicFooter />
     </>
   );
 }

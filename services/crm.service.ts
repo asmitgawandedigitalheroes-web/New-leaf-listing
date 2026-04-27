@@ -29,14 +29,37 @@ export interface CrmSyncResult {
 const getWebhookConfig = async (provider: CrmProvider): Promise<WebhookConfig | null> => {
   const isMockMode = import.meta.env.VITE_USE_MOCK_CRM === 'true';
 
-  // Try fetching from supabase crm_configs table first
+  // 1. Read from platform_settings (saved by Admin → Settings → CRM Integration)
+  try {
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'crm_config')
+      .maybeSingle();
+
+    if (provider === 'ghl') {
+      const ghl = settingsRow?.value?.ghl;
+      if (ghl?.apiKey) {
+        return {
+          url: ghl.webhookUrl || '',
+          auth_header: 'Authorization',
+          auth_value: ghl.apiKey,
+          is_mock: isMockMode,
+        };
+      }
+    }
+  } catch {
+    // fall through to next source
+  }
+
+  // 2. Fallback: crm_configs table (legacy)
   const { data } = await supabase
     .from('crm_configs')
     .select('webhook_url, auth_header, auth_value')
     .eq('provider', provider)
     .maybeSingle();
 
-  if (data) {
+  if (data?.auth_value) {
     return {
       url: data.webhook_url,
       auth_header: data.auth_header ?? 'Authorization',
@@ -45,17 +68,16 @@ const getWebhookConfig = async (provider: CrmProvider): Promise<WebhookConfig | 
     };
   }
 
-  // Fallback to environment variables
+  // 3. Fallback: environment variables
   const envPrefix = provider.toUpperCase();
-  const url = import.meta?.env?.[`VITE_${envPrefix}_WEBHOOK_URL`] ?? null;
-  const authValue = import.meta?.env?.[`VITE_${envPrefix}_API_KEY`] ?? null;
+  const url      = import.meta?.env?.[`VITE_${envPrefix}_WEBHOOK_URL`] ?? null;
+  const authValue = import.meta?.env?.[`VITE_${envPrefix}_API_KEY`]   ?? null;
 
-  // If we have an API key, the direct GHL API doesn't need a webhook URL
   if (!url && authValue && !isMockMode) {
     return {
       url: '',
       auth_header: 'Authorization',
-      auth_value: `Bearer ${authValue}`,
+      auth_value: authValue,
       is_mock: false,
     };
   }
@@ -76,7 +98,7 @@ const getWebhookConfig = async (provider: CrmProvider): Promise<WebhookConfig | 
   return {
     url,
     auth_header: 'Authorization',
-    auth_value: authValue ? `Bearer ${authValue}` : '',
+    auth_value: authValue ? authValue : '',
     is_mock: isMockMode,
   };
 };
@@ -92,17 +114,28 @@ const syncToGhlApi = async (
 ): Promise<CrmSyncResult & { provider: CrmProvider }> => {
   const isPit = apiKey.startsWith('pit-');
 
-  // v2 uses customFields (array of {id, field_value}); v1 uses customField with fieldValue
-  const locationId = import.meta?.env?.VITE_GHL_LOCATION_ID ?? null;
+  // Read locationId from Supabase platform_settings (crm_config.ghl.locationId),
+  // falling back to the env var for local dev.
+  let locationId: string | null = import.meta?.env?.VITE_GHL_LOCATION_ID ?? null;
+  try {
+    const { data: settingsRow } = await supabase
+      .from('platform_settings')
+      .select('value')
+      .eq('key', 'crm_config')
+      .maybeSingle();
+    const dbLocationId = settingsRow?.value?.ghl?.locationId;
+    if (dbLocationId) locationId = dbLocationId;
+  } catch {
+    // fall through to env var
+  }
 
   // PIT tokens → v2 LeadConnector API; agency keys → v1
-  // Agency-level PIT tokens require locationId as a query param (body causes 422, missing causes 403)
+  // v2 location-level PIT tokens: locationId must be in the request BODY (not query string)
+  // Query string locationId causes 403 for location-level tokens
   const baseUrl = isPit
     ? 'https://services.leadconnectorhq.com/contacts/'
     : 'https://rest.gohighlevel.com/v1/contacts/';
-  const url = isPit && locationId
-    ? `${baseUrl}?locationId=${locationId}`
-    : baseUrl;
+  const url = baseUrl; // No query param — locationId goes in body for v2
 
   const nameParts = (lead.contact_name ?? 'Lead').split(' ');
   const firstName = nameParts[0];
@@ -118,31 +151,33 @@ const syncToGhlApi = async (
     phone:  lead.contact_phone ?? undefined,
     source: lead.source ?? 'NLV Listings',
     tags:   ['nlv-lead', 'platform_lead', lead.territory_id ?? 'unassigned'].filter(Boolean),
+    // v2 requires locationId in the request body
+    ...(isPit && locationId ? { locationId } : {}),
     ...(isPit
       ? {
           customFields: [
-            { id: 'nlv_lead_id',            field_value: lead.id },
-            { id: 'nlv_listing_id',         field_value: lead.listing_id ?? '' },
-            { id: 'nlv_territory',          field_value: lead.territory_id ?? '' },
-            { id: 'nlv_lead_status',        field_value: lead.status ?? 'new' },
-            { id: 'nlv_assigned_to',        field_value: lead.assigned_realtor_id ?? '' },
-            { id: 'nlv_assigned_director',  field_value: lead.assigned_director_id ?? '' },
-            { id: 'nlv_attribution_flag',   field_value: 'platform' },
-            { id: 'nlv_attribution_expiry', field_value: attributionExpiry },
-            { id: 'nlv_commission_type',    field_value: lead.lead_type ?? 'deal' },
-            { id: 'nlv_platform_lead',      field_value: 'true' },
+            { id: 'contact.nlv_lead_id',            field_value: lead.id },
+            { id: 'contact.nlv_listing_id',         field_value: lead.listing_id ?? '' },
+            { id: 'contact.nlv_territory',          field_value: lead.territory_id ?? '' },
+            { id: 'contact.nlv_lead_status',        field_value: lead.status ?? 'new' },
+            { id: 'contact.nlv_assigned_to',        field_value: lead.assigned_realtor_id ?? '' },
+            { id: 'contact.nlv_assigned_director',  field_value: lead.assigned_director_id ?? '' },
+            { id: 'contact.nlv_attribution_flag',   field_value: 'platform' },
+            { id: 'contact.nlv_attribution_expiry', field_value: attributionExpiry },
+            { id: 'contact.nlv_commission_type',    field_value: lead.lead_type ?? 'deal' },
+            { id: 'contact.nlv_platform_lead',      field_value: 'true' },
           ],
         }
       : {
           customField: [
-            { id: 'nlv_lead_id',            fieldValue: lead.id },
-            { id: 'nlv_territory',          fieldValue: lead.territory_id ?? '' },
-            { id: 'nlv_lead_status',        fieldValue: lead.status ?? 'new' },
-            { id: 'nlv_assigned_to',        fieldValue: lead.assigned_realtor_id ?? '' },
-            { id: 'nlv_assigned_director',  fieldValue: lead.assigned_director_id ?? '' },
-            { id: 'nlv_attribution_flag',   fieldValue: 'platform' },
-            { id: 'nlv_attribution_expiry', fieldValue: attributionExpiry },
-            { id: 'nlv_platform_lead',      fieldValue: 'true' },
+            { id: 'contact.nlv_lead_id',            fieldValue: lead.id },
+            { id: 'contact.nlv_territory',          fieldValue: lead.territory_id ?? '' },
+            { id: 'contact.nlv_lead_status',        fieldValue: lead.status ?? 'new' },
+            { id: 'contact.nlv_assigned_to',        fieldValue: lead.assigned_realtor_id ?? '' },
+            { id: 'contact.nlv_assigned_director',  fieldValue: lead.assigned_director_id ?? '' },
+            { id: 'contact.nlv_attribution_flag',   fieldValue: 'platform' },
+            { id: 'contact.nlv_attribution_expiry', fieldValue: attributionExpiry },
+            { id: 'contact.nlv_platform_lead',      fieldValue: 'true' },
           ],
         }),
   };
@@ -152,6 +187,14 @@ const syncToGhlApi = async (
     Authorization: `Bearer ${apiKey}`,
   };
   if (isPit) headers['Version'] = '2021-07-28';
+
+  // Debug: log token prefix and URL so we can confirm the right key is used
+  console.log('[CrmService] GHL sync →', {
+    url,
+    tokenPrefix: apiKey?.slice(0, 16) + '...',
+    isPit,
+    locationId,
+  });
 
   try {
     let response = await fetch(url, {
@@ -166,6 +209,7 @@ const syncToGhlApi = async (
     if (!response.ok && response.status === 400 && responseBody?.message?.includes('duplicat')) {
       const email = contactPayload.email;
       if (email && isPit && locationId) {
+        // duplicate search requires locationId as query param (GET endpoint)
         const searchRes = await fetch(
           `https://services.leadconnectorhq.com/contacts/search/duplicate?locationId=${locationId}&email=${encodeURIComponent(email)}`,
           { headers }
@@ -174,14 +218,15 @@ const syncToGhlApi = async (
         const existingId = searchBody?.contact?.id;
 
         if (existingId) {
-          const putUrl = locationId
-            ? `https://services.leadconnectorhq.com/contacts/${existingId}?locationId=${locationId}`
-            : `https://services.leadconnectorhq.com/contacts/${existingId}`;
-          response = await fetch(putUrl, {
-            method: 'PUT',
-            headers,
-            body: JSON.stringify(contactPayload),
-          });
+          // PUT update — locationId in body (same as POST)
+          response = await fetch(
+            `https://services.leadconnectorhq.com/contacts/${existingId}`,
+            {
+              method: 'PUT',
+              headers,
+              body: JSON.stringify(contactPayload), // locationId already in contactPayload
+            }
+          );
           responseBody = await response.json().catch(() => null);
         }
       }

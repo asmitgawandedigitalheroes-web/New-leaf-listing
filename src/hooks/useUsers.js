@@ -206,7 +206,7 @@ export function useUsers() {
           'Authorization': `Bearer ${supabaseAnonKey}`,
           'apikey': supabaseAnonKey,
         },
-        body: JSON.stringify({ email, full_name, role, territory_id, plan, caller_token: token }),
+        body: JSON.stringify({ email, full_name, role, territory_id, plan, caller_token: token, app_url: window.location.origin }),
       });
 
       const data = await response.json();

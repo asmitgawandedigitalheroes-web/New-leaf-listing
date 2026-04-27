@@ -105,7 +105,7 @@ export default function PublicListingDetail() {
     try {
       const { error: leadError } = await createInquiry({
         listing_id: listing.id,
-        source: 'listing_detail',
+        source: 'website',
         name: contactForm.name,
         email: contactForm.email,
         phone: contactForm.phone,

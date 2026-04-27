@@ -242,7 +242,9 @@ export const routingService = {
    */
   applyRouting: async (leadId: string, result: RoutingResult): Promise<void> => {
     const updates: Record<string, unknown> = {
-      status:     'assigned',
+      // Only mark 'assigned' when a realtor is assigned
+      // If only director is found, keep as 'new' until director assigns to a realtor
+      status:     result.assigned_realtor_id ? 'assigned' : 'new',
       updated_at: new Date().toISOString(),
     };
 

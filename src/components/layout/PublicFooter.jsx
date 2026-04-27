@@ -1,12 +1,22 @@
 import { Link } from 'react-router-dom';
 import { HiMapPin, HiEnvelope, HiPhone } from 'react-icons/hi2';
-import { FaXTwitter, FaInstagram, FaLinkedinIn } from 'react-icons/fa6';
+import { FaXTwitter, FaInstagram, FaLinkedinIn, FaFacebookF, FaYoutube, FaTiktok } from 'react-icons/fa6';
 import NLVLogo from '../ui/NLVLogo';
+import { useSiteSettings, formatAddress } from '../../context/SiteSettingsContext';
 
 const G  = '#D4AF37';
 const DG = '#1F4D3A';
 
-const COLS = [
+const SOCIAL_ICONS = {
+  twitter:   { icon: FaXTwitter,   label: 'Twitter / X' },
+  instagram: { icon: FaInstagram,  label: 'Instagram' },
+  linkedin:  { icon: FaLinkedinIn, label: 'LinkedIn' },
+  facebook:  { icon: FaFacebookF,  label: 'Facebook' },
+  youtube:   { icon: FaYoutube,    label: 'YouTube' },
+  tiktok:    { icon: FaTiktok,     label: 'TikTok' },
+};
+
+const NAV_COLS = [
   {
     heading: 'Platform',
     links: [
@@ -25,29 +35,26 @@ const COLS = [
       { label: 'Terms of Service', to: '/terms-of-service' },
     ],
   },
-  {
-    heading: 'Contact',
-    items: [
-      { icon: HiMapPin,  text: '8 The Green St\nDover, DE, 19901' },
-      { icon: HiEnvelope, text: 'support@nlvlistings.com' },
-      { icon: HiPhone,    text: '1-866-886-3040' },
-    ],
-  },
 ];
-
-const SOCIALS = [
-  { icon: FaXTwitter,    label: 'Twitter / X',  href: 'https://www.linkedin.com/showcase/nlv-listings/about/?viewAsMember=true' },
-  { icon: FaInstagram,   label: 'Instagram',    href: 'https://www.instagram.com/nlvlistingz?igsh=MXhnZm50NWJxeHh1YQ%3D%3D&utm_source=qr' },
-  { icon: FaLinkedinIn,  label: 'LinkedIn',     href: 'https://www.linkedin.com/showcase/nlv-listings/about/?viewAsMember=true' },
-];
-
-// Removed legacy Ico function
 
 export default function PublicFooter() {
+  const { contact, social, supportEmail } = useSiteSettings();
+
+  const contactItems = [
+    { icon: HiMapPin,   text: formatAddress(contact) },
+    { icon: HiEnvelope, text: supportEmail },
+    { icon: HiPhone,    text: contact.phone },
+  ].filter(i => i.text);
+
+  const socials = Object.entries(social)
+    .filter(([, href]) => href)
+    .map(([key, href]) => ({ ...SOCIAL_ICONS[key], href }))
+    .filter(s => s.icon);
+
   return (
     <footer style={{ background: DG, color: '#fff' }}>
       <div className="flex justify-center pt-8">
-        <div style={{ width: 1200, height: 1, background: `linear-gradient(90deg, transparent 0%, ${G} 50%, transparent 100%)`, boxShadow: `0 0 12px ${G}`, opacity: 0.8 }} />
+        <div style={{ width: '100%', maxWidth: 1200, height: 1, background: `linear-gradient(90deg, transparent 0%, ${G} 50%, transparent 100%)`, boxShadow: `0 0 12px ${G}`, opacity: 0.8 }} />
       </div>
 
       {/* Main grid */}
@@ -61,8 +68,8 @@ export default function PublicFooter() {
               The premier digital marketplace for elite real estate professionals. Curated listings, intelligent routing, absolute discretion.
             </p>
             {/* Social icons */}
-            <div className="flex items-center gap-2">
-              {SOCIALS.map(s => (
+            <div className="flex items-center gap-2 flex-wrap">
+              {socials.map(s => (
                 <a
                   key={s.label}
                   href={s.href}
@@ -81,46 +88,45 @@ export default function PublicFooter() {
           </div>
 
           {/* Nav columns */}
-          {COLS.map(col => (
+          {NAV_COLS.map(col => (
             <div key={col.heading}>
               <h4 className="text-xs font-bold uppercase tracking-[0.15em] mb-5" style={{ color: G }}>
                 {col.heading}
               </h4>
-
-              {col.links && (
-                <ul className="flex flex-col gap-3">
-                  {col.links.map(l => (
-                    <li key={l.label}>
-                      <Link
-                        to={l.to}
-                        className="text-sm no-underline transition-colors"
-                        style={{ color: 'rgba(255,255,255,0.55)' }}
-                        onMouseEnter={e => e.currentTarget.style.color = '#fff'}
-                        onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}
-                      >
-                        {l.label}
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
-              {col.items && (
-                <ul className="flex flex-col gap-4">
-                  {col.items.map(item => (
-                    <li key={item.icon} className="flex items-start gap-3">
-                      <span className="mt-0.5 flex-shrink-0" style={{ color: G }}>
-                        <item.icon size={15} />
-                      </span>
-                      <span className="text-xs leading-relaxed whitespace-pre-line" style={{ color: 'rgba(255,255,255,0.55)' }}>
-                        {item.text}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <ul className="flex flex-col gap-3">
+                {col.links.map(l => (
+                  <li key={l.label}>
+                    <Link
+                      to={l.to}
+                      className="text-sm no-underline transition-colors"
+                      style={{ color: 'rgba(255,255,255,0.55)' }}
+                      onMouseEnter={e => e.currentTarget.style.color = '#fff'}
+                      onMouseLeave={e => e.currentTarget.style.color = 'rgba(255,255,255,0.55)'}
+                    >
+                      {l.label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
             </div>
           ))}
+
+          {/* Contact column (synced with admin settings) */}
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-[0.15em] mb-5" style={{ color: G }}>Contact</h4>
+            <ul className="flex flex-col gap-4">
+              {contactItems.map((item, i) => (
+                <li key={i} className="flex items-start gap-3">
+                  <span className="mt-0.5 flex-shrink-0" style={{ color: G }}>
+                    <item.icon size={15} />
+                  </span>
+                  <span className="text-xs leading-relaxed whitespace-pre-line" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                    {item.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
         </div>
       </div>
 

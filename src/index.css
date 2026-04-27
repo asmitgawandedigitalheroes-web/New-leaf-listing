@@ -47,7 +47,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
-html { scroll-behavior: smooth; }
+html { scroll-behavior: smooth; overflow-x: hidden; }
 
 body {
   margin: 0;
@@ -58,6 +58,7 @@ body {
   background: #F9FAFB;
   -webkit-font-smoothing: antialiased;
   min-width: 320px;
+  overflow-x: hidden;
 }
 
 ::-webkit-scrollbar { width: 5px; height: 5px; }

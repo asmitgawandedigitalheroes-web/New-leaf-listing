@@ -237,7 +237,7 @@ export default function SubscriptionsPage() {
 
         {/* Plan Distribution */}
         {planDist.length > 0 && (
-          <div className="grid lg:grid-cols-3 gap-6">
+          <div className="grid lg:grid-cols-3 gap-6 min-w-0">
             <SectionCard title="Plan Distribution">
               <div className="px-6 py-5 flex flex-col gap-4">
                 {planDist.map(p => (
@@ -253,7 +253,7 @@ export default function SubscriptionsPage() {
                 ))}
               </div>
             </SectionCard>
-            <div className="lg:col-span-2">
+            <div className="lg:col-span-2 min-w-0">
               <SectionCard title="Cancelled Subscriptions">
                 <div className="data-table">
                   <table>

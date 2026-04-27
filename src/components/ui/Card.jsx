@@ -52,7 +52,7 @@ export function SectionCard({ title, action, children, footer, noPadding = false
           {action && <div className="flex items-center flex-shrink-0">{action}</div>}
         </div>
       )}
-      <div className={noPadding ? '' : ''}>{children}</div>
+      <div className={`min-w-0 ${noPadding ? '' : ''}`}>{children}</div>
       {footer && (
         <div className="px-6 py-3" style={{ borderTop: '1px solid #F3F4F6', background: '#FAFAFA' }}>
           {footer}

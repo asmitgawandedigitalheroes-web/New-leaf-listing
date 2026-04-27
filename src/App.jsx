@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-route
 import { useEffect } from 'react';
 import { ToastProvider } from './context/ToastContext';
 import { AuthProvider } from './context/AuthContext';
+import { SiteSettingsProvider } from './context/SiteSettingsContext';
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import ErrorBoundary from './components/ui/ErrorBoundary';
 
@@ -91,6 +92,7 @@ export default function App() {
     <ErrorBoundary>
       <ToastProvider>
         <AuthProvider>
+          <SiteSettingsProvider>
           <BrowserRouter>
             <ScrollToTop />
             <Routes>
@@ -365,6 +367,7 @@ export default function App() {
 
             </Routes>
           </BrowserRouter>
+          </SiteSettingsProvider>
         </AuthProvider>
       </ToastProvider>
     </ErrorBoundary>

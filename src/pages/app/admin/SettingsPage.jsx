@@ -374,6 +374,13 @@ export default function SettingsPage() {
               <Toggle label="" value={crm.ghl?.enabled} onChange={v => setCrm(p => ({ ...p, ghl: { ...(p.ghl || {}), enabled: v } }))} />
             </div>
             <div className="grid grid-cols-1 gap-3">
+              <Field label="GHL Location ID" hint="GHL → Settings → Business Info → Location ID. Required for PIT tokens to push contacts to the correct sub-account.">
+                <TextInput
+                  placeholder="sro8sN54qUKbEO5UGkrx"
+                  value={crm.ghl?.locationId}
+                  onChange={e => setCrm(p => ({ ...p, ghl: { ...(p.ghl || {}), locationId: e.target.value } }))}
+                />
+              </Field>
               <Field label="GHL API Key (Private Integration Key)" hint="GHL → Settings → Integrations → API Keys → Create Key. Used to create contacts directly via GHL REST API — no workflow trigger required.">
                 <TextInput
                   type="password"

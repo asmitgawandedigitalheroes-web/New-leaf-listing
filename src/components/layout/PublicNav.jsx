@@ -36,7 +36,7 @@ export default function PublicNav() {
 
   return (
     <nav
-      className="fixed top-0 w-full z-50 font-headline transition-all duration-300"
+      className="fixed top-0 w-full z-[1000] font-headline transition-all duration-300"
       style={{
         background: scrolled ? 'rgba(255,255,255,0.97)' : '#ffffff',
         borderBottom: `1px solid ${scrolled ? 'rgba(212,175,55,0.22)' : 'rgba(212,175,55,0.12)'}`,

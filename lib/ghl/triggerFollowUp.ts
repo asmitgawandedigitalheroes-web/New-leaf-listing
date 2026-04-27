@@ -35,11 +35,17 @@ export async function triggerFollowUp(
     id?: string;
   }
 ): Promise<{ success: boolean; error?: string }> {
-  const workflowId = import.meta?.env?.VITE_GHL_FOLLOWUP_WORKFLOW_ID ?? '';
-  const locationId = import.meta?.env?.VITE_GHL_LOCATION_ID ?? '';
+  // Read from env first, then hardcoded fallback so workflow always fires
+  const workflowId =
+    import.meta?.env?.VITE_GHL_FOLLOWUP_WORKFLOW_ID ||
+    '1163e04c-35b8-4f24-9156-725fa4471940';
+
+  const locationId =
+    import.meta?.env?.VITE_GHL_LOCATION_ID ||
+    'sro8sN54qUKbEO5UGkrx';
 
   if (!workflowId) {
-    console.warn('[triggerFollowUp] VITE_GHL_FOLLOWUP_WORKFLOW_ID not set — skipping workflow enroll');
+    console.warn('[triggerFollowUp] Workflow ID not configured — skipping');
     return { success: false, error: 'Workflow ID not configured' };
   }
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import Navbar from '../../components/shared/Navbar';
-import Footer from '../../components/shared/Footer';
+import PublicNav from '../../components/layout/PublicNav';
+import PublicFooter from '../../components/layout/PublicFooter';
 import Hero from '../../components/home/Hero';
 import Features from '../../components/home/Features';
 import Stats from '../../components/home/Stats';
@@ -26,7 +26,7 @@ export default function HomePage() {
       <div className="fixed inset-0 noise-overlay pointer-events-none z-[100]" />
 
       {/* Navigation */}
-      <Navbar />
+      <PublicNav />
 
       <main>
         {/* Section 1: Hero */}
@@ -67,7 +67,7 @@ export default function HomePage() {
       </main>
 
       {/* Footer */}
-      <Footer />
+      <PublicFooter />
     </div>
   );
 }

@@ -1,10 +1,20 @@
 import { useState } from 'react';
-import { HiMapPin, HiEnvelope, HiPhone, HiCheckCircle } from 'react-icons/hi2';
-import { FaXTwitter, FaInstagram, FaLinkedinIn } from 'react-icons/fa6';
+import { HiMapPin, HiEnvelope, HiPhone, HiCheckCircle, HiChevronDown } from 'react-icons/hi2';
+import { FaXTwitter, FaInstagram, FaLinkedinIn, FaFacebookF, FaYoutube, FaTiktok } from 'react-icons/fa6';
 import PublicNav from '../../components/layout/PublicNav';
 import PublicFooter from '../../components/layout/PublicFooter';
 import { useEnquiries } from '../../hooks/useEnquiries';
 import { useToast } from '../../context/ToastContext';
+import { useSiteSettings } from '../../context/SiteSettingsContext';
+
+const SOCIAL_ICONS = {
+  twitter:   { icon: FaXTwitter,   label: 'Twitter / X' },
+  instagram: { icon: FaInstagram,  label: 'Instagram' },
+  linkedin:  { icon: FaLinkedinIn, label: 'LinkedIn' },
+  facebook:  { icon: FaFacebookF,  label: 'Facebook' },
+  youtube:   { icon: FaYoutube,    label: 'YouTube' },
+  tiktok:    { icon: FaTiktok,     label: 'TikTok' },
+};
 
 const G  = '#D4AF37';
 const GH = '#B8962E';
@@ -15,24 +25,6 @@ const TS = '#4B5563';
 const TM = '#6B7280';
 const BD = '#E5E7EB';
 const IB = '#D1D5DB';
-
-const CONTACT_INFO = [
-  {
-    icon: HiMapPin,
-    title: 'Headquarters',
-    lines: ['8 The Green St', 'Dover, DE, 19901'],
-  },
-  {
-    icon: HiEnvelope,
-    title: 'Email Us',
-    lines: ['hello@nlvlistings.com', 'support@nlvlistings.com'],
-  },
-  {
-    icon: HiPhone,
-    title: 'Call Us',
-    lines: ['1-866-886-3040', 'Mon–Fri, 9am – 6pm PST'],
-  },
-];
 
 const SUBJECTS = [
   'Membership Inquiry',
@@ -71,9 +63,39 @@ const inputStyle = {
 export default function ContactPage() {
   const { submitContactForm } = useEnquiries();
   const { addToast } = useToast();
+  const { contact, social, supportEmail } = useSiteSettings();
   const [form, setForm] = useState({ name: '', email: '', phone: '', subject: '', message: '' });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
+  const [openFaq, setOpenFaq] = useState(0);
+
+  const cityStateZip = [
+    [contact.city, contact.state].filter(Boolean).join(', '),
+    contact.zip,
+  ].filter(Boolean).join(' ').trim();
+
+  const CONTACT_INFO = [
+    {
+      icon: HiMapPin,
+      title: 'Headquarters',
+      lines: [contact.address, cityStateZip].filter(Boolean),
+    },
+    {
+      icon: HiEnvelope,
+      title: 'Email Us',
+      lines: [supportEmail].filter(Boolean),
+    },
+    {
+      icon: HiPhone,
+      title: 'Call Us',
+      lines: [contact.phone, contact.businessHours].filter(Boolean),
+    },
+  ].filter(i => i.lines.length > 0);
+
+  const socialLinks = Object.entries(social)
+    .filter(([, href]) => href)
+    .map(([key, href]) => ({ ...SOCIAL_ICONS[key], href }))
+    .filter(s => s.icon);
 
   const set = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
 
@@ -174,14 +196,11 @@ export default function ContactPage() {
             ))}
 
             {/* Social links */}
+            {socialLinks.length > 0 && (
             <div className="rounded-2xl p-6" style={{ background: DG, boxShadow: '0 4px 20px rgba(31,77,58,0.15)' }}>
               <div className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>Follow NLV</div>
-              <div className="flex gap-3">
-                {[
-                  { icon: FaXTwitter,   label: 'Twitter / X', href: 'https://www.linkedin.com/showcase/nlv-listings/about/?viewAsMember=true' },
-                  { icon: FaInstagram,  label: 'Instagram',   href: 'https://www.instagram.com/nlvlistingz?igsh=MXhnZm50NWJxeHh1YQ%3D%3D&utm_source=qr' },
-                  { icon: FaLinkedinIn, label: 'LinkedIn',    href: 'https://www.linkedin.com/showcase/nlv-listings/about/?viewAsMember=true' },
-                ].map(s => (
+              <div className="flex gap-3 flex-wrap">
+                {socialLinks.map(s => (
                   <a
                     key={s.label}
                     href={s.href}
@@ -198,6 +217,7 @@ export default function ContactPage() {
                 ))}
               </div>
             </div>
+            )}
           </div>
 
           {/* Contact form */}
@@ -320,11 +340,11 @@ export default function ContactPage() {
 
       {/* ── FAQ strip ── */}
       <section className="py-16 px-6 md:px-8" style={{ background: '#F9FAFB' }}>
-        <div className="max-w-5xl mx-auto">
+        <div className="max-w-3xl mx-auto">
           <div className="text-center mb-10">
             <h2 className="font-headline font-bold text-2xl md:text-3xl" style={{ color: TX }}>Common Questions</h2>
           </div>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="flex flex-col gap-3">
             {[
               { q: 'How do I apply for membership?', a: 'Click "Apply for Membership" and complete the 3-step onboarding. Approval takes 1–2 business days.' },
               { q: 'What is the difference between a Realtor and a Regional Director?', a: 'Realtors use the platform to access listings, generate leads, and earn commissions on deals. Regional Directors work directly with New Leaf Vision, overseeing specific territories, managing operations, and driving growth within their region using advanced tools and dashboards.' },
@@ -333,12 +353,53 @@ export default function ContactPage() {
               { q: 'How is lead routing handled?', a: 'Our smart routing engine assigns inbound leads to the best-matched realtor based on territory, plan tier, and availability.' },
               { q: 'How do I cancel my subscription?', a: 'You can cancel at any time from your Billing page. Your access continues until the end of the billing period.' },
               { q: 'Do you offer refunds?', a: 'We offer a 7-day money-back guarantee on all new subscriptions. Contact support to request a refund.' },
-            ].map((item, i) => (
-              <div key={i} className="p-5 rounded-xl border" style={{ background: '#fff', borderColor: '#E5E7EB' }}>
-                <h4 className="font-semibold text-sm mb-2" style={{ color: '#111111' }}>{item.q}</h4>
-                <p className="text-sm leading-relaxed" style={{ color: '#6B7280' }}>{item.a}</p>
-              </div>
-            ))}
+            ].map((item, i) => {
+              const isOpen = openFaq === i;
+              return (
+                <div
+                  key={i}
+                  className="rounded-xl border overflow-hidden transition-all"
+                  style={{
+                    background: '#fff',
+                    borderColor: isOpen ? G : '#E5E7EB',
+                    boxShadow: isOpen ? '0 4px 16px rgba(212,175,55,0.10)' : '0 1px 2px rgba(0,0,0,0.03)',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setOpenFaq(isOpen ? -1 : i)}
+                    className="w-full flex items-center justify-between gap-4 px-5 py-4 text-left transition-colors"
+                    style={{ background: 'transparent' }}
+                    onMouseEnter={e => { if (!isOpen) e.currentTarget.style.background = '#FAFAF7'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+                    aria-expanded={isOpen}
+                  >
+                    <h4 className="font-semibold text-sm md:text-base" style={{ color: TX }}>{item.q}</h4>
+                    <span
+                      className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-transform duration-300"
+                      style={{
+                        background: isOpen ? G : SB,
+                        color: isOpen ? '#fff' : DG,
+                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                      }}
+                    >
+                      <HiChevronDown size={18} />
+                    </span>
+                  </button>
+                  <div
+                    className="overflow-hidden transition-all duration-300 ease-in-out"
+                    style={{
+                      maxHeight: isOpen ? 400 : 0,
+                      opacity: isOpen ? 1 : 0,
+                    }}
+                  >
+                    <p className="px-5 pb-5 text-sm leading-relaxed" style={{ color: TS }}>
+                      {item.a}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       </section>

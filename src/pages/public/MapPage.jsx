@@ -138,7 +138,9 @@ export default function MapPage() {
   const [search,    setSearch]    = useState('');
   const [active,     setActive]     = useState(null);  // active listing id
   const [flyTarget,  setFlyTarget]  = useState(null);  // [lat, lng] to fly to
-  const [sideOpen,   setSideOpen]   = useState(true);
+  const [sideOpen,   setSideOpen]   = useState(
+    typeof window !== 'undefined' ? window.innerWidth >= 768 : true
+  );
 
   useEffect(() => {
     async function fetchMapListings() {
@@ -195,7 +197,7 @@ export default function MapPage() {
   const activeListingDetail = active ? listings.find(l => l.id === active) : null;
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#f0f0f0' }}>
+    <div className="min-h-screen flex flex-col overflow-x-hidden" style={{ background: '#f0f0f0' }}>
       <PublicNav />
 
       {/* Page title bar */}
@@ -215,7 +217,7 @@ export default function MapPage() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-1.5">
             <span className="w-3 h-3 rounded-full" style={{ background: GOLD }} />
             <span className="text-[11px] font-semibold" style={{ color: 'rgba(255,255,255,0.7)' }}>
@@ -231,7 +233,7 @@ export default function MapPage() {
           {/* Sidebar toggle */}
           <button
             onClick={() => setSideOpen(v => !v)}
-            className="hidden md:flex items-center gap-1 text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all"
+            className="flex items-center gap-1 text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all"
             style={{ background: 'rgba(255,255,255,0.1)', color: '#fff' }}
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.18)'}
             onMouseLeave={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
@@ -356,9 +358,8 @@ export default function MapPage() {
         {/* ── Sidebar ── */}
         {sideOpen && (
           <div
-            className="hidden md:flex flex-col"
+            className="flex flex-col absolute md:relative inset-0 md:inset-auto w-full md:w-[300px] z-[600]"
             style={{
-              width: 300,
               background: '#fff',
               borderLeft: `1px solid ${BORDER}`,
               overflowY: 'auto',

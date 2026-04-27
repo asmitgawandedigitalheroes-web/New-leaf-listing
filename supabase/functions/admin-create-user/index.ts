@@ -52,7 +52,7 @@ serve(async (req: Request) => {
 
     // Parse body first — we read caller_token from body to avoid gateway JWT issues
     const body = await req.json();
-    const { email, full_name, role, phone, territory_id, plan, caller_token } = body;
+    const { email, full_name, role, phone, territory_id, plan, caller_token, app_url } = body;
 
     // Fallback: also accept Authorization header
     const authHeader = req.headers.get("authorization");
@@ -110,8 +110,9 @@ serve(async (req: Request) => {
       });
     }
 
-    // Derive the app origin from the request so redirectTo works in all environments
-    const origin = req.headers.get("origin") || req.headers.get("referer")?.split("/").slice(0, 3).join("/") || url;
+    // Derive the app origin from the request so redirectTo works in all environments.
+    // Use the explicitly passed app_url if available for maximum reliability.
+    const origin = app_url?.replace(/\/$/, '') || req.headers.get("origin") || req.headers.get("referer")?.split("/").slice(0, 3).join("/") || url;
 
     // Create the auth user using invitation API (this sends the email automatically).
     // redirectTo lands the user on our custom password-set page (not Supabase's default).

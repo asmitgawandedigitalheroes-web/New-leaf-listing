@@ -206,12 +206,14 @@ export default function DirectorListingsPage() {
               </div>
               <div className="p-4">
                 <div className="font-semibold text-gray-900 mb-1">{listing.title}</div>
-                <div className="text-xs text-gray-400 flex items-center gap-1 mb-2">
+                <div className="text-xs text-gray-400 flex items-center gap-1 mb-3">
                   <HiMapPin size={11} />
                   {[listing.city, listing.state].filter(Boolean).join(', ') || 'No location'}
                 </div>
-                <div className="font-bold text-gray-900 mb-3">${listing.price?.toLocaleString()}</div>
-                {renderActions(listing)}
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-bold text-gray-900">${listing.price?.toLocaleString()}</div>
+                  <div className="flex-shrink-0">{renderActions(listing)}</div>
+                </div>
               </div>
             </div>
           )) : (

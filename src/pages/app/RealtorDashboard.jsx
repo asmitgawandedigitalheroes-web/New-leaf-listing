@@ -267,9 +267,9 @@ export default function RealtorDashboard() {
         </div>
 
         {/* Listings + activity */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        <div className="grid lg:grid-cols-3 gap-6 min-w-0">
           {/* My listings */}
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 min-w-0">
             <SectionCard title="My Listings" action={
               <Link to="/realtor/listings" className="inline-flex items-center justify-center px-4 py-2 bg-gold-600 text-white rounded-lg text-sm font-semibold hover:bg-gold-700 transition-all font-headline no-underline" style={{ background: '#D4AF37' }}>
                 + Add Listing

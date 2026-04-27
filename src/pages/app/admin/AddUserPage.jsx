@@ -742,6 +742,7 @@ function CreateAdminTab() {
           role:         'admin',
           territory_id: null,
           caller_token: token,
+          app_url:      window.location.origin,
         }),
       });
 
